@@ -26,7 +26,7 @@ from .model import (
 
 GRAPHQL_API = "https://api.github.com/graphql"
 REST_API = "https://api.github.com"
-USER_AGENT = "nika-project-os (https://github.com/supernovae-st/nika-spec)"
+USER_AGENT = "nika-project-os (https://github.com/nika-open/nika-spec)"
 
 
 class GitHubError(RuntimeError):
