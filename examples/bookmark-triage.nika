@@ -40,7 +40,7 @@ const:
     type: { array: string }
     value:
       - "https://example.com"
-      - "https://github.com/supernovae-st/nika"
+      - "https://github.com/nika-open/nika"
       - "https://this-domain-does-not-exist-0000.invalid" # the dead one · the recover path IS the demo
 
 permits:
