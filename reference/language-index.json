@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "spec-language-knowledge",
-  "owner": "supernovae-st/nika-spec",
+  "owner": "nika-open/nika-spec",
   "revision": "4e259e5b8012fcdf92f094142a52dfef24099b85",
   "inputs": {
     "schemas/workflow.schema.json": "4baa0b4f5dc020d46ca43c79dccc33b4975d33441b9b2bed4545b1736dacbc19",

@@ -133,7 +133,7 @@ def build(root=ROOT):
     return {
         "schemaVersion": 1,
         "kind": "spec-language-knowledge",
-        "owner": "supernovae-st/nika-spec",
+        "owner": "nika-open/nika-spec",
         "revision": revision,
         "inputs": inputs,
         "words": records,
