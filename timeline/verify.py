@@ -35,7 +35,7 @@ except ImportError:
     sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-UA = {"User-Agent": "nika-timeline-verify (https://github.com/supernovae-st/nika-spec)"}
+UA = {"User-Agent": "nika-timeline-verify (https://github.com/nika-open/nika-spec)"}
 
 PROVABLE = {"git-tag", "github-release", "github-commit", "github-pr", "crates-io"}
 UNPROVABLE = {"testimony", "private-archive"}
