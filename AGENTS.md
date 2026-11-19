@@ -6,7 +6,7 @@ Vendor-neutral agent entry per the AGENTS.md convention (agents.md).
 
 The **canonical specification** of the Nika workflow language —
 Apache-2.0, runtime-agnostic (the GraphQL/OpenAPI pattern). The
-reference engine lives at `supernovae-st/nika` (AGPL-3.0-or-later).
+reference engine lives at `nika-open/nika` (AGPL-3.0-or-later).
 
 ## Load-bearing facts (verify in-repo · never from memory)
 

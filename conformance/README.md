@@ -47,7 +47,7 @@ is still IN the corpus, marked `DIVERGENCE` in its header, and reports
 v0.1 carries one: `errors/recover-task-ref-no-edge.nika` — spec 05
 §recover requires awaiting a no-edge referent's terminal state; the
 reference engine currently raises `NIKA-VAR-001`
-([supernovae-st/nika#291](https://github.com/supernovae-st/nika/issues/291)).
+([nika-open/nika#291](https://github.com/nika-open/nika/issues/291)).
 An engine that follows the spec turns this file green — and is MORE
 conformant than the reference on that row.
 

@@ -32,7 +32,7 @@ proposals folded into the draft on 2026-08-13, and where each law lives
 now.
 
 Not sure it deserves a NEP yet? Ideate first in the engine's
-[Ideas discussions](https://github.com/supernovae-st/nika/discussions/categories/ideas) —
+[Ideas discussions](https://github.com/nika-open/nika/discussions/categories/ideas) —
 the fastest lane to pressure-test a language idea before writing one.
 
 ## Everything else → a plain PR

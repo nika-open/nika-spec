@@ -17,7 +17,7 @@
 #             NEVER a PASS for the reference engine until fixed; a
 #             conformant engine that follows the spec turns it green.
 #             (v0.1 exemplar: recover-task-ref-no-edge · spec 05 §recover
-#             await — tracked at supernovae-st/nika#291.)
+#             await — tracked at nika-open/nika#291.)
 #
 # Header grammar (see README.md §Headers):
 #   # Expected: NIKA-XXX-NNN at CHECK.            negative · at static-check time

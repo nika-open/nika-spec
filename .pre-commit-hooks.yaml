@@ -3,7 +3,7 @@
 # The maintained `nika-check` hook ships with the engine. Pin its release:
 #
 #   repos:
-#     - repo: https://github.com/supernovae-st/nika
+#     - repo: https://github.com/nika-open/nika
 #       rev: v0.124.4
 #       hooks:
 #         - id: nika-check
@@ -13,7 +13,7 @@
 # hook (pre-commit accepts a commit SHA as `rev:`):
 #
 #   repos:
-#     - repo: https://github.com/supernovae-st/nika-spec
+#     - repo: https://github.com/nika-open/nika-spec
 #       rev: <full commit SHA>
 #       hooks:
 #         - id: nika-check-strict

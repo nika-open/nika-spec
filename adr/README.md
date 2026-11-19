@@ -2,7 +2,7 @@
 
 Decision records for the **language surface** (CLI contract · trace/event
 vocabulary · spec-section lifts). The reference engine's implementation
-ADRs live at [supernovae-st/nika](https://github.com/supernovae-st/nika)
+ADRs live at [nika-open/nika](https://github.com/nika-open/nika)
 `docs/adr/` — **one shared numbering series, two homes**. Before
 allocating a number, check BOTH directories (and the engine's
 `docs/adr/index.toml` registry, which decides canonical allocation on

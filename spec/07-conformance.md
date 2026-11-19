@@ -181,7 +181,7 @@ reading it flags a valid workflow that uses them. For the exact schema an
 engine embeds, `nika spec --schema` prints it offline, byte for byte, and the
 address pinned at the embedded spec commit serves the same bytes online; for
 engine 0.124.4 (spec `66dbdd6`) that is
-`https://raw.githubusercontent.com/supernovae-st/nika-spec/66dbdd647b08d7c8594d966fa27e680ffb3fa11f/schemas/workflow.schema.json`;
+`https://raw.githubusercontent.com/nika-open/nika-spec/66dbdd647b08d7c8594d966fa27e680ffb3fa11f/schemas/workflow.schema.json`;
 engine 0.124.3 embeds `5a579bc`, engine 0.124.2 embeds `b4c692f`, and
 engines 0.124.0 and 0.124.1 embed `5cd95cd`.
 
@@ -378,11 +378,11 @@ To make the claim · an engine ·
 
 1. MUST pass the conformance suite at the claimed level
 2. MUST name the level and the spec commit in the claim (the format above)
-3. MAY open a PR on [supernovae-st/nika-spec](https://github.com/supernovae-st/nika-spec) to be listed in `CONFORMANT_IMPLEMENTATIONS.md`
+3. MAY open a PR on [nika-open/nika-spec](https://github.com/nika-open/nika-spec) to be listed in `CONFORMANT_IMPLEMENTATIONS.md`
 
 The claim is earned by passing the suite, never by declaration
 ([NEP-0000 §Relationship to conformance](../governance/nep-0000-the-nep-process.md)).
-The reference implementation [supernovae-st/nika](https://github.com/supernovae-st/nika) targets Stdlib v0.1 conformance.
+The reference implementation [nika-open/nika](https://github.com/nika-open/nika) targets Stdlib v0.1 conformance.
 
 ---
 

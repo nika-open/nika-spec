@@ -6,7 +6,7 @@
 
 **Scope:** a candidate corpus, not implemented Compile support or measured HOT
 coverage. This revision consolidates the inventory proposed in
-[PR #335](https://github.com/supernovae-st/nika-spec/pull/335) with integrity gates
+[PR #335](https://github.com/nika-open/nika-spec/pull/335) with integrity gates
 and executable wiring proofs.
 
 Owners: nika#1665 (HOT) · nika#1666 (patterns) · nika#1656 (measure).

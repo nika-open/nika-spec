@@ -13,7 +13,7 @@
   </a>
 </p>
 
-<h1 align="center">supernovae-st/nika-spec</h1>
+<h1 align="center">nika-open/nika-spec</h1>
 
 <p align="center">
   <strong>Know exactly what a <code>.nika</code> workflow can say, check yours without an engine, and prove that an engine runs it right.</strong><br>
@@ -21,25 +21,25 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsupernovae-st%2Fnika-spec%2Fmain%2FVERSION&search=%5B0-9%5D%2B%5C.%5B0-9%5D%2B%5C.%5B0-9%5D%2B%5BA-Za-z0-9.-%5D*&label=spec" alt="Spec version, read live from the VERSION file"></a>
-  <a href="https://github.com/supernovae-st/nika-spec/actions/workflows/conformance.yml"><img src="https://github.com/supernovae-st/nika-spec/actions/workflows/conformance.yml/badge.svg?branch=main" alt="Conformance gate"></a>
-  <a href="https://github.com/supernovae-st/nika/releases/latest"><img src="https://img.shields.io/github/v/release/supernovae-st/nika?label=engine" alt="Engine release"></a>
+  <a href="VERSION"><img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnika-open%2Fnika-spec%2Fmain%2FVERSION&search=%5B0-9%5D%2B%5C.%5B0-9%5D%2B%5C.%5B0-9%5D%2B%5BA-Za-z0-9.-%5D*&label=spec" alt="Spec version, read live from the VERSION file"></a>
+  <a href="https://github.com/nika-open/nika-spec/actions/workflows/conformance.yml"><img src="https://github.com/nika-open/nika-spec/actions/workflows/conformance.yml/badge.svg?branch=main" alt="Conformance gate"></a>
+  <a href="https://github.com/nika-open/nika/releases/latest"><img src="https://img.shields.io/github/v/release/nika-open/nika?label=engine" alt="Engine release"></a>
   <a href="https://docs.nika.sh"><img src="https://img.shields.io/badge/docs-docs.nika.sh-8b8cf8.svg" alt="Documentation"></a>
 </p>
 
 <p align="center">
-  <a href="https://scorecard.dev/viewer/?uri=github.com/supernovae-st/nika-spec"><img src="https://api.scorecard.dev/projects/github.com/supernovae-st/nika-spec/badge" alt="OpenSSF Scorecard"></a>
-  <a href="https://github.com/supernovae-st/nika-spec/actions/workflows/codeql.yml"><img src="https://github.com/supernovae-st/nika-spec/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL"></a>
-  <a href="https://github.com/supernovae-st/nika-spec/actions/workflows/reuse.yml"><img src="https://github.com/supernovae-st/nika-spec/actions/workflows/reuse.yml/badge.svg" alt="REUSE 3.3"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/nika-open/nika-spec"><img src="https://api.scorecard.dev/projects/github.com/nika-open/nika-spec/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://github.com/nika-open/nika-spec/actions/workflows/codeql.yml"><img src="https://github.com/nika-open/nika-spec/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL"></a>
+  <a href="https://github.com/nika-open/nika-spec/actions/workflows/reuse.yml"><img src="https://github.com/nika-open/nika-spec/actions/workflows/reuse.yml/badge.svg" alt="REUSE 3.3"></a>
   <a href="https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/supernovae-st/nika-spec"><img src="https://archive.softwareheritage.org/badge/origin/https://github.com/supernovae-st/nika-spec/" alt="Archived by Software Heritage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0"></a>
 </p>
 
-<!-- engine clips on this page (GIFs) are pinned to the v0.123.0 tag of supernovae-st/nika, the release they ship with · move the pin with the next engine release whose media changes -->
+<!-- engine clips on this page (GIFs) are pinned to the v0.123.0 tag of nika-open/nika, the release they ship with · move the pin with the next engine release whose media changes -->
 <p align="center"><b>Watch a workflow drawn as a graph, then lit up in the order it will run.</b></p>
 <p align="center">
-  <a href="https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/dag-execution.optimized.gif">
-    <img src="https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/dag-execution.optimized.gif"
+  <a href="https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/dag-execution.optimized.gif">
+    <img src="https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/dag-execution.optimized.gif"
          alt="A pull-request review workflow from this repository's examples, drawn by nika inspect as a graph of tasks colored by verb, then lit wave by wave in the order nika check plans"
          width="960">
   </a>
@@ -65,7 +65,7 @@ can verify. One Rust binary, local-first, open source (AGPL-3.0).
 > **This repository is the language itself.** It defines what every key and
 > verb in a `.nika` file means, what `nika check` must catch and what a run
 > must record, and it ships the tests that prove an engine agrees. The engine
-> that runs your workflows is [nika](https://github.com/supernovae-st/nika);
+> that runs your workflows is [nika](https://github.com/nika-open/nika);
 > this specification is Apache-2.0, so anyone can build on it.
 
 ## Check a workflow in two minutes
@@ -75,7 +75,7 @@ You need `git` and Python 3. No engine, no API key, no model call.
 1. **Get the spec and its checker.**
 
    ```sh
-   git clone https://github.com/supernovae-st/nika-spec && cd nika-spec
+   git clone https://github.com/nika-open/nika-spec && cd nika-spec
    python3 -m venv .venv && . .venv/bin/activate
    pip install -r conformance/requirements.txt
    ```
@@ -119,7 +119,7 @@ You need `git` and Python 3. No engine, no API key, no model call.
    ```
 
 > [!NOTE]
-> **Have the engine?** Install it with `brew install supernovae-st/tap/nika`
+> **Have the engine?** Install it with `brew install nika-open/tap/nika`
 > and audit the same file. `nika check` is the static audit that runs before
 > any model is called; `--model mock/echo` rehearses with no key and no
 > network. The report ends with its verdict (nika 0.123.0):
@@ -146,8 +146,8 @@ can do in one file.
 **Watch one file use all nine keys and every verb, labelled key by key.**
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/spec-anatomy.optimized.gif">
-    <img src="https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/spec-anatomy.optimized.gif"
+  <a href="https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/spec-anatomy.optimized.gif">
+    <img src="https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/spec-anatomy.optimized.gif"
          alt="One .nika file using all nine envelope keys, each labelled in the spec's own words, with four tasks that each bind one verb; nika check says run ready and the file folds to a labelled skeleton"
          width="860">
   </a>
@@ -244,8 +244,8 @@ on captured output.
 **Watch the check catch two mistakes before anything runs.**
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/static-check-fix.optimized.gif">
-    <img src="https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/static-check-fix.optimized.gif"
+  <a href="https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/static-check-fix.optimized.gif">
+    <img src="https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/static-check-fix.optimized.gif"
          alt="nika check catches two defects in a pull-request review workflow; after the fix, the re-check comes back clean and ready to run"
          width="860">
   </a>
@@ -257,12 +257,12 @@ Two more rules at work, each beside its chapter:
 - **The file is the boundary.** `permits:` lists what a workflow may reach,
   run and read. Anything outside is refused
   ([spec/10](spec/10-authority.md)).
-  ▶ [Watch the boundary catch an escape](https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/permits-audit.optimized.gif)
+  ▶ [Watch the boundary catch an escape](https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/permits-audit.optimized.gif)
   (captured with nika 0.121.0)
 - **Failure is part of the plan.** Errors carry stable codes.
   `on_error: recover` names the fallback; the trace records what failed
   ([spec/05](spec/05-errors.md)).
-  ▶ [Watch a run recover when its live feed goes missing](https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/on-error-recover.optimized.gif)
+  ▶ [Watch a run recover when its live feed goes missing](https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/on-error-recover.optimized.gif)
   (captured with nika 0.121.0)
 
 ### The <!-- canon:pillars -->5<!-- /canon --> pillars · immutable forever
@@ -327,15 +327,15 @@ declaring it.
 
 ## Reference implementation
 
-[supernovae-st/nika](https://github.com/supernovae-st/nika) is the reference
+[nika-open/nika](https://github.com/nika-open/nika) is the reference
 engine: one Rust binary, AGPL-3.0-or-later. Its latest release is 0.124.4.
 0.124 is the current release line. Work stays focused on maintenance,
 security and the media capabilities workflows need; native video is planned
-for 0.125. Install it with `brew install supernovae-st/tap/nika` (or
+for 0.125. Install it with `brew install nika-open/tap/nika` (or
 `curl -LsSf https://nika.sh/install.sh | sh`), then check and run any
 workflow.
 
-▶ [Watch it audit a meeting-notes workflow, then run it on a local model](https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/nika-hero.optimized.gif)
+▶ [Watch it audit a meeting-notes workflow, then run it on a local model](https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/nika-hero.optimized.gif)
 (captured with nika 0.121.0)
 
 - **The spec travels inside it.** The binary embeds this repository's
@@ -395,7 +395,7 @@ The full boundary, including what Nika deliberately does not do, is in
 Every spec version ships a pack of canonical workflows: a numbered learning
 path, and real jobs you can copy.
 
-▶ [Watch `nika try` list the jobs this pack ships](https://raw.githubusercontent.com/supernovae-st/nika/v0.123.0/media/gifs/workflow-gallery.optimized.gif)
+▶ [Watch `nika try` list the jobs this pack ships](https://raw.githubusercontent.com/nika-open/nika/v0.123.0/media/gifs/workflow-gallery.optimized.gif)
 (captured with nika 0.121.0, which listed 35 jobs; 0.123.0 lists 36, adding
 `remove-owned-file`)
 
@@ -451,10 +451,10 @@ flowchart LR
 
 | Repository | Its pin | What the pin binds |
 |---|---|---|
-| [nika](https://github.com/supernovae-st/nika) (the engine) | `SPEC_PIN` at its root | `scripts/sync-pack.sh` copies `VERSION`, `QUICKSTART.md`, `canon.yaml`, the conformance coverage matrix, the design tokens, `spec/`, `schemas/`, `examples/`, `templates/` and the stdlib prose into `crates/nika-pack/pack/`, and writes `SPEC_SHA` beside them. CI copies again at the pin and fails on any byte of drift; the build refuses a `SPEC_PIN` and a `SPEC_SHA` that disagree. |
-| [nika-vscode](https://github.com/supernovae-st/nika-vscode) | `SPEC_PIN` | its generated parts (verb starters, authoring shapes, design tokens) are projected from that commit, and a parity check judges them there |
-| [nika-registry](https://github.com/supernovae-st/nika-registry) | `SPEC_PIN` | the first-party showcase entries are projected from that commit, so CI and a local run produce byte-identical entries |
-| [nika-docs](https://github.com/supernovae-st/nika-docs) · [nika.sh](https://nika.sh) | this repository's generators | [`scripts/canon-projectors.py`](scripts/canon-projectors.py) and [`scripts/showcase-projector.py`](scripts/showcase-projector.py) render the counts and the examples as generated pages, checked with `--check`, never hand-copied |
+| [nika](https://github.com/nika-open/nika) (the engine) | `SPEC_PIN` at its root | `scripts/sync-pack.sh` copies `VERSION`, `QUICKSTART.md`, `canon.yaml`, the conformance coverage matrix, the design tokens, `spec/`, `schemas/`, `examples/`, `templates/` and the stdlib prose into `crates/nika-pack/pack/`, and writes `SPEC_SHA` beside them. CI copies again at the pin and fails on any byte of drift; the build refuses a `SPEC_PIN` and a `SPEC_SHA` that disagree. |
+| [nika-vscode](https://github.com/nika-open/nika-vscode) | `SPEC_PIN` | its generated parts (verb starters, authoring shapes, design tokens) are projected from that commit, and a parity check judges them there |
+| [nika-registry](https://github.com/nika-open/nika-registry) | `SPEC_PIN` | the first-party showcase entries are projected from that commit, so CI and a local run produce byte-identical entries |
+| [nika-docs](https://github.com/nika-open/nika-docs) · [nika.sh](https://nika.sh) | this repository's generators | [`scripts/canon-projectors.py`](scripts/canon-projectors.py) and [`scripts/showcase-projector.py`](scripts/showcase-projector.py) render the counts and the examples as generated pages, checked with `--check`, never hand-copied |
 | provenance | [`ESTATE_PIN`](ESTATE_PIN) here, and in the engine, the docs, the site and the registry | the shared provenance verifier is mirrored byte for byte from a published spec commit; the CI `mirror` job compares against exactly that commit |
 
 An engine release names its spec commit twice, and the two must agree. For
@@ -462,8 +462,8 @@ example, at engine v0.124.4, the current release (the last line runs in
 your clone of this repository):
 
 ```sh
-curl -sS https://raw.githubusercontent.com/supernovae-st/nika/v0.124.4/SPEC_PIN | grep -v '^#'
-curl -sS https://raw.githubusercontent.com/supernovae-st/nika/v0.124.4/crates/nika-pack/pack/SPEC_SHA
+curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.124.4/SPEC_PIN | grep -v '^#'
+curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.124.4/crates/nika-pack/pack/SPEC_SHA
 git log -1 --format='%h %ad %s' --date=short 66dbdd647b08d7c8594d966fa27e680ffb3fa11f
 ```
 
@@ -533,7 +533,7 @@ nika-spec/
   `spec/*.md`, rerun `python3 scripts/llms-projector.py --write`.
 
 Not sure an idea deserves a proposal? Pressure-test it first in the engine's
-[Ideas discussions](https://github.com/supernovae-st/nika/discussions/categories/ideas).
+[Ideas discussions](https://github.com/nika-open/nika/discussions/categories/ideas).
 [CONTRIBUTING.md](CONTRIBUTING.md) has the full bar.
 
 <details>
@@ -554,13 +554,13 @@ Not sure an idea deserves a proposal? Pressure-test it first in the engine's
 
 - **The current release.** Engine 0.124.4 (2026-11-12) embeds this spec
   at commit
-  [`66dbdd6`](https://github.com/supernovae-st/nika-spec/commit/66dbdd647b08d7c8594d966fa27e680ffb3fa11f),
+  [`66dbdd6`](https://github.com/nika-open/nika-spec/commit/66dbdd647b08d7c8594d966fa27e680ffb3fa11f),
   the commit its `SPEC_PIN` names. 0.124.3 (2026-11-10) embeds
-  [`5a579bc`](https://github.com/supernovae-st/nika-spec/commit/5a579bc707c720689ba7940f6d66e11c14050d6f),
+  [`5a579bc`](https://github.com/nika-open/nika-spec/commit/5a579bc707c720689ba7940f6d66e11c14050d6f),
   0.124.2 (2026-11-10) embeds
-  [`b4c692f`](https://github.com/supernovae-st/nika-spec/commit/b4c692f538834db5733f972cd8f52b558c18926a),
+  [`b4c692f`](https://github.com/nika-open/nika-spec/commit/b4c692f538834db5733f972cd8f52b558c18926a),
   and 0.124.0 (2026-10-27) and 0.124.1 (2026-10-28) embed
-  [`5cd95cd`](https://github.com/supernovae-st/nika-spec/commit/5cd95cd25c0ff453be266794a03666e5e3f2d7a8).
+  [`5cd95cd`](https://github.com/nika-open/nika-spec/commit/5cd95cd25c0ff453be266794a03666e5e3f2d7a8).
   0.124 is the current release line. Work stays focused on maintenance, security and
   the media capabilities workflows need; native video is planned for 0.125.
   The 0.123.x line, opened by the open-source reference release 0.123.0
@@ -613,18 +613,18 @@ Not sure an idea deserves a proposal? Pressure-test it first in the engine's
 
 | | Repository | What it gives you |
 |---|---|---|
-| 🦋 | [nika](https://github.com/supernovae-st/nika) | The engine and CLI: write, check, run and verify AI workflows |
-| 📖 | [nika-docs](https://github.com/supernovae-st/nika-docs) | The documentation, live at [docs.nika.sh](https://docs.nika.sh) |
-| 📜 | **[nika-spec](https://github.com/supernovae-st/nika-spec)** | **The language specification and the suite that proves an engine follows it** |
-| 🧩 | [nika-vscode](https://github.com/supernovae-st/nika-vscode) | The editor extension, frozen at 0.120 and not qualified with 0.124: use `nika lsp` and the JSON Schema |
-| 🟦 | [nika-client](https://github.com/supernovae-st/nika-client) | Run and verify workflows from TypeScript |
-| ✅ | [nika-action](https://github.com/supernovae-st/nika-action) | A GitHub Action that posts a `nika check` verdict on your pull requests |
-| 🚀 | [nika-actions-starter](https://github.com/supernovae-st/nika-actions-starter) | A ready template: workflows, editor setup and CI from the first push |
-| 📦 | [nika-registry](https://github.com/supernovae-st/nika-registry) | Shareable workflows, pinned and re-verified |
-| 🤖 | [nika-plugins](https://github.com/supernovae-st/nika-plugins) | Teaches your coding agent (Claude Code, Codex, Cursor…) to write Nika |
-| 🍺 | [homebrew-tap](https://github.com/supernovae-st/homebrew-tap) | `brew install supernovae-st/tap/nika` |
-| 🐙 | [gh-nika](https://github.com/supernovae-st/gh-nika) | The Nika CLI as a GitHub CLI extension |
-| 🏛️ | [nika-estate](https://github.com/supernovae-st/nika-estate) | Where each file in Nika's core repositories comes from, declared and re-checkable |
+| 🦋 | [nika](https://github.com/nika-open/nika) | The engine and CLI: write, check, run and verify AI workflows |
+| 📖 | [nika-docs](https://github.com/nika-open/nika-docs) | The documentation, live at [docs.nika.sh](https://docs.nika.sh) |
+| 📜 | **[nika-spec](https://github.com/nika-open/nika-spec)** | **The language specification and the suite that proves an engine follows it** |
+| 🧩 | [nika-vscode](https://github.com/nika-open/nika-vscode) | The editor extension, frozen at 0.120 and not qualified with 0.124: use `nika lsp` and the JSON Schema |
+| 🟦 | [nika-client](https://github.com/nika-open/nika-client) | Run and verify workflows from TypeScript |
+| ✅ | [nika-action](https://github.com/nika-open/nika-action) | A GitHub Action that posts a `nika check` verdict on your pull requests |
+| 🚀 | [nika-actions-starter](https://github.com/nika-open/nika-actions-starter) | A ready template: workflows, editor setup and CI from the first push |
+| 📦 | [nika-registry](https://github.com/nika-open/nika-registry) | Shareable workflows, pinned and re-verified |
+| 🤖 | [nika-plugins](https://github.com/nika-open/nika-plugins) | Teaches your coding agent (Claude Code, Codex, Cursor…) to write Nika |
+| 🍺 | [homebrew-tap](https://github.com/nika-open/homebrew-tap) | `brew install nika-open/tap/nika` |
+| 🐙 | [gh-nika](https://github.com/nika-open/gh-nika) | The Nika CLI as a GitHub CLI extension |
+| 🏛️ | [nika-estate](https://github.com/nika-open/nika-estate) | Where each file in Nika's core repositories comes from, declared and re-checkable |
 <!-- /city:map -->
 
 ## Related
@@ -637,8 +637,8 @@ Not sure an idea deserves a proposal? Pressure-test it first in the engine's
   [timeline](https://docs.nika.sh/reference/timeline) and the
   [map of the ecosystem](https://docs.nika.sh/reference/knowledge-system)
   live in the docs
-- **From TypeScript:** [nika-client](https://github.com/supernovae-st/nika-client)
-  is published on npm as `@supernovae-st/nika`; each package version
+- **From TypeScript:** [nika-client](https://github.com/nika-open/nika-client)
+  is published on npm as `@nika-open/nika`; each package version
   bundles the engine with the same number
 
 ## Security
@@ -671,7 +671,7 @@ AGPL-3.0-or-later.
 > watch it grow.
 >
 > **Status** · authoring, static checking AND execution all work TODAY:
-> `brew install supernovae-st/tap/nika`, then `nika check` + `nika run` on
+> `brew install nika-open/tap/nika`, then `nika check` + `nika run` on
 > any file in this page. The spec text itself is v0.2.0-draft, the version
 > engine 0.124.4 embeds; the language family v1 is already frozen — there is
 > no `nika: v2`, ever.
@@ -892,7 +892,7 @@ Then, and only then, swap `model:` to a paid seat.
 
 ## 6 · Check it · run it
 
-With the reference engine installed (`brew install supernovae-st/tap/nika`) ·
+With the reference engine installed (`brew install nika-open/tap/nika`) ·
 
 ```bash
 nika check summarize-and-translate.nika   # static audit, before a single token is spent
@@ -7091,7 +7091,7 @@ reading it flags a valid workflow that uses them. For the exact schema an
 engine embeds, `nika spec --schema` prints it offline, byte for byte, and the
 address pinned at the embedded spec commit serves the same bytes online; for
 engine 0.124.4 (spec `66dbdd6`) that is
-`https://raw.githubusercontent.com/supernovae-st/nika-spec/66dbdd647b08d7c8594d966fa27e680ffb3fa11f/schemas/workflow.schema.json`;
+`https://raw.githubusercontent.com/nika-open/nika-spec/66dbdd647b08d7c8594d966fa27e680ffb3fa11f/schemas/workflow.schema.json`;
 engine 0.124.3 embeds `5a579bc`, engine 0.124.2 embeds `b4c692f`, and
 engines 0.124.0 and 0.124.1 embed `5cd95cd`.
 
@@ -7288,11 +7288,11 @@ To make the claim · an engine ·
 
 1. MUST pass the conformance suite at the claimed level
 2. MUST name the level and the spec commit in the claim (the format above)
-3. MAY open a PR on [supernovae-st/nika-spec](https://github.com/supernovae-st/nika-spec) to be listed in `CONFORMANT_IMPLEMENTATIONS.md`
+3. MAY open a PR on [nika-open/nika-spec](https://github.com/nika-open/nika-spec) to be listed in `CONFORMANT_IMPLEMENTATIONS.md`
 
 The claim is earned by passing the suite, never by declaration
 ([NEP-0000 §Relationship to conformance](../governance/nep-0000-the-nep-process.md)).
-The reference implementation [supernovae-st/nika](https://github.com/supernovae-st/nika) targets Stdlib v0.1 conformance.
+The reference implementation [nika-open/nika](https://github.com/nika-open/nika) targets Stdlib v0.1 conformance.
 
 ---
 
@@ -11161,9 +11161,9 @@ NIKA_BIN=<engine> python3 scripts/runtime-differential.py    # the behavioral ti
 
 ## Adoption
 
-Non-SuperNovae engines (Python · Go · TS) run this same suite to validate
-conformance · open a PR on `supernovae-st/nika-spec` to be listed in
-`CONFORMANT_IMPLEMENTATIONS.md`.
+Engines other than the reference implementation (Python · Go · TS) run
+this same suite to validate conformance · open a PR on
+`nika-open/nika-spec` to be listed in `CONFORMANT_IMPLEMENTATIONS.md`.
 
 ---
 
@@ -11182,7 +11182,7 @@ conformance · open a PR on `supernovae-st/nika-spec` to be listed in
 
 | Implementation | Language | Core | Runtime | Stdlib | Spec commit | Verified |
 |---|---|---|---|---|---|---|
-| [nika](https://github.com/supernovae-st/nika) (reference engine · **0.124.4**, the current release) | Rust | ⚠️ **277/278** core fixtures by command (`NIKA_BIN=… sh scripts/parity-sweep.sh` · full static sweep **453/460**: core 277/278 · deep 50/50 · stdlib 109/115 · values 10/10 · types 4/4 · gates 3/3). The one core red: `core/envelope/055-secret-source-vault-withdrawn-refused`, a `source: vault` secret the engine still admits after 01 withdrew it | ⚠️ **126/135 measured agree** · 9 diverge · 0 engine errors (`NIKA_BIN=… python3 scripts/runtime-differential.py` · the run, trace and access doors). All nine are `runtime/access-harness` fixtures on staged routes. `003 · 004 · 006 · 013 · 020` run an `agent:` task on the scripted codex-acp seat. The engine runs an agent task on that seat only in its measured asking mode, `read-only`, which the fixtures' route world cannot offer, so it refuses with `NIKA-1805` before the first prompt (0.124.3 gives the same five; `020` declares no service tier and meets the same refusal). `018 · 019 · 022` declare a service tier the staged session offers. The engine applies a tier on that seat only at the release where it measured the seat's speed control, codex-acp 1.13.1; the scripted seat answers as release 0.16.2, so it refuses with `NIKA-1805` before the first prompt. `027` declares a tier on the `openai` API route and expects `NIKA-1800` at admission; the engine refuses the staged plain-HTTP endpoint earlier, at its unknown-cost admission, with no code. 46 of the 181 behavioral fixtures are UNSUPPORTED by this runner (no qualified adapter yet), named and never counted as passes | ⚠️ static surface **109/115**: `stdlib/001` and `stdlib/providers/001 · 002 · 006` (a bare `NIKA-PROVIDER` code with no number, which the runner's matching rule cannot match to the expected namespace; 006 is also refused with `NIKA-AUTH-006`: its agent names `nika:read`, which no `permits.tools` grants), `stdlib/hash/002 · 003` (the signing arguments of `nika:hash`, spec-ahead of this engine, refused with `NIKA-BUILTIN-001`: `key` and `op` in 002, `op`, `public_key` and `signature` in 003; 002 is also refused with `NIKA-SEC-006`: its secret key reaches `nika:hash` with no `egress:` sanction, which [01 §egress](spec/01-envelope.md#egress--optional--sanctioned-destinations-declassification) refuses, so that cause is the fixture's) · lints **7/7** at the only door + 25 NO-DOOR (`NIKA_BIN=… python3 scripts/lints-differential.py`) | `66dbdd6` | 2026-11-12 |
+| [nika](https://github.com/nika-open/nika) (reference engine · **0.124.4**, the current release) | Rust | ⚠️ **277/278** core fixtures by command (`NIKA_BIN=… sh scripts/parity-sweep.sh` · full static sweep **453/460**: core 277/278 · deep 50/50 · stdlib 109/115 · values 10/10 · types 4/4 · gates 3/3). The one core red: `core/envelope/055-secret-source-vault-withdrawn-refused`, a `source: vault` secret the engine still admits after 01 withdrew it | ⚠️ **126/135 measured agree** · 9 diverge · 0 engine errors (`NIKA_BIN=… python3 scripts/runtime-differential.py` · the run, trace and access doors). All nine are `runtime/access-harness` fixtures on staged routes. `003 · 004 · 006 · 013 · 020` run an `agent:` task on the scripted codex-acp seat. The engine runs an agent task on that seat only in its measured asking mode, `read-only`, which the fixtures' route world cannot offer, so it refuses with `NIKA-1805` before the first prompt (0.124.3 gives the same five; `020` declares no service tier and meets the same refusal). `018 · 019 · 022` declare a service tier the staged session offers. The engine applies a tier on that seat only at the release where it measured the seat's speed control, codex-acp 1.13.1; the scripted seat answers as release 0.16.2, so it refuses with `NIKA-1805` before the first prompt. `027` declares a tier on the `openai` API route and expects `NIKA-1800` at admission; the engine refuses the staged plain-HTTP endpoint earlier, at its unknown-cost admission, with no code. 46 of the 181 behavioral fixtures are UNSUPPORTED by this runner (no qualified adapter yet), named and never counted as passes | ⚠️ static surface **109/115**: `stdlib/001` and `stdlib/providers/001 · 002 · 006` (a bare `NIKA-PROVIDER` code with no number, which the runner's matching rule cannot match to the expected namespace; 006 is also refused with `NIKA-AUTH-006`: its agent names `nika:read`, which no `permits.tools` grants), `stdlib/hash/002 · 003` (the signing arguments of `nika:hash`, spec-ahead of this engine, refused with `NIKA-BUILTIN-001`: `key` and `op` in 002, `op`, `public_key` and `signature` in 003; 002 is also refused with `NIKA-SEC-006`: its secret key reaches `nika:hash` with no `egress:` sanction, which [01 §egress](spec/01-envelope.md#egress--optional--sanctioned-destinations-declassification) refuses, so that cause is the fixture's) · lints **7/7** at the only door + 25 NO-DOOR (`NIKA_BIN=… python3 scripts/lints-differential.py`) | `66dbdd6` | 2026-11-12 |
 | [nika](https://github.com/supernovae-st/nika) (reference engine · 0.124.3 · superseded by the row above) | Rust | ⚠️ **277/278** core fixtures by command (`NIKA_BIN=… sh scripts/parity-sweep.sh` · full static sweep **453/460**: core 277/278 · deep 50/50 · stdlib 109/115 · values 10/10 · types 4/4 · gates 3/3). The one core red: `core/envelope/055-secret-source-vault-withdrawn-refused`, a `source: vault` secret the engine still admits after 01 withdrew it | ⚠️ **126/135 measured agree** · 9 diverge · 0 engine errors (`NIKA_BIN=… python3 scripts/runtime-differential.py` · the run, trace and access doors). All nine are `runtime/access-harness` fixtures on staged routes. `003 · 004 · 006 · 013 · 020` run an `agent:` task on the scripted codex-acp seat. The engine runs an agent task on that seat only in its measured asking mode, `read-only`, which the fixtures' route world cannot offer, so it refuses with `NIKA-1805` before the first prompt (0.124.2 gives the same five; `020` declares no service tier and meets the same refusal). `018 · 019 · 022` declare a service tier the staged session offers. The engine applies a tier on that seat only at the release where it measured the seat's speed control, codex-acp 1.13.1; the scripted seat answers as release 0.16.2, so it refuses with `NIKA-1805` before the first prompt. `027` declares a tier on the `openai` API route and expects `NIKA-1800` at admission; the engine refuses the staged plain-HTTP endpoint earlier, at its unknown-cost admission, with no code. 46 of the 181 behavioral fixtures are UNSUPPORTED by this runner (no qualified adapter yet), named and never counted as passes | ⚠️ static surface **109/115**: `stdlib/001` and `stdlib/providers/001 · 002 · 006` (a bare `NIKA-PROVIDER` code with no number, which the runner's matching rule cannot match to the expected namespace; 006 is also refused with `NIKA-AUTH-006`: its agent names `nika:read`, which no `permits.tools` grants), `stdlib/hash/002 · 003` (the signing arguments of `nika:hash`, spec-ahead of this engine, refused with `NIKA-BUILTIN-001`: `key` and `op` in 002, `op`, `public_key` and `signature` in 003; 002 is also refused with `NIKA-SEC-006`: its secret key reaches `nika:hash` with no `egress:` sanction, which [01 §egress](spec/01-envelope.md#egress--optional--sanctioned-destinations-declassification) refuses, so that cause is the fixture's) · lints **7/7** at the only door + 25 NO-DOOR (`NIKA_BIN=… python3 scripts/lints-differential.py`) | `5a579bc` | 2026-11-10 |
 | [nika](https://github.com/supernovae-st/nika) (reference engine · 0.124.2 · superseded by the row above) | Rust | ⚠️ **277/278** core fixtures by command (`NIKA_BIN=… sh scripts/parity-sweep.sh` · full static sweep **453/460**: core 277/278 · deep 50/50 · stdlib 109/115 · values 10/10 · types 4/4 · gates 3/3). The one core red: `core/envelope/055-secret-source-vault-withdrawn-refused`, a `source: vault` secret the engine still admits after 01 withdrew it | ⚠️ **126/135 measured agree** · 9 diverge · 0 engine errors (`NIKA_BIN=… python3 scripts/runtime-differential.py` · the run, trace and access doors). All nine are `runtime/access-harness` fixtures on staged routes. `003 · 004 · 006 · 013 · 020` run an `agent:` task on the scripted codex-acp seat. The engine runs an agent task on that seat only in its measured asking mode, `read-only`, which the fixtures' route world cannot offer, so it refuses with `NIKA-1805` before the first prompt (0.124.1 gives the same first four; `020` declares no service tier and meets the same refusal). `018 · 019 · 022` declare a service tier the staged session offers. The engine applies a tier on that seat only at the release where it measured the seat's speed control, codex-acp 1.13.1; the scripted seat answers as release 0.16.2, so it refuses with `NIKA-1805` before the first prompt. `027` declares a tier on the `openai` API route and expects `NIKA-1800` at admission; the engine refuses the staged plain-HTTP endpoint earlier, at its unknown-cost admission, with no code. 46 of the 181 behavioral fixtures are UNSUPPORTED by this runner (no qualified adapter yet), named and never counted as passes | ⚠️ static surface **109/115**: `stdlib/001` and `stdlib/providers/001 · 002 · 006` (a bare `NIKA-PROVIDER` code with no number, which the runner's matching rule cannot match to the expected namespace; 006 is also refused with `NIKA-AUTH-006`: its agent names `nika:read`, which no `permits.tools` grants), `stdlib/hash/002 · 003` (the signing arguments of `nika:hash`, spec-ahead of this engine, refused with `NIKA-BUILTIN-001`: `key` and `op` in 002, `op`, `public_key` and `signature` in 003; 002 is also refused with `NIKA-SEC-006`: its secret key reaches `nika:hash` with no `egress:` sanction, which [01 §egress](spec/01-envelope.md#egress--optional--sanctioned-destinations-declassification) refuses, so that cause is the fixture's) · lints **7/7** at the only door + 25 NO-DOOR (`NIKA_BIN=… python3 scripts/lints-differential.py`) | `b4c692f` | 2026-11-10 |
 | [nika](https://github.com/supernovae-st/nika) (reference engine · 0.124.1 · superseded by the row above) | Rust | ⚠️ **267/268** core fixtures by command (`NIKA_BIN=… sh scripts/parity-sweep.sh` · full static sweep **443/450**: core 267/268 · deep 50/50 · stdlib 109/115 · values 10/10 · types 4/4 · gates 3/3). The one core red: `core/envelope/055-secret-source-vault-withdrawn-refused`, a `source: vault` secret the engine still admits after 01 withdrew it | ⚠️ **121/125 measured agree** · 4 diverge · 0 engine errors (`NIKA_BIN=… python3 scripts/runtime-differential.py` · the run, trace and access doors). The 4 that diverge, `runtime/access-harness/003 · 004 · 006 · 013`, run an `agent:` task on the scripted codex-acp seat. The engine runs an agent task on that seat only in its measured asking mode, `read-only`, which the fixtures' route world cannot offer, so it refuses with `NIKA-1805` before the first prompt (0.124.0 gives the same four). 46 of the 171 behavioral fixtures are UNSUPPORTED by this runner (no qualified adapter yet), named and never counted as passes | ⚠️ static surface **109/115**: `stdlib/001` and `stdlib/providers/001 · 002 · 006` (a bare `NIKA-PROVIDER` code with no number, which the runner's matching rule cannot match to the expected namespace; 006 is also refused with `NIKA-AUTH-006`: its agent names `nika:read`, which no `permits.tools` grants), `stdlib/hash/002 · 003` (the signing arguments of `nika:hash`, spec-ahead of this engine, refused with `NIKA-BUILTIN-001`: `key` and `op` in 002, `op`, `public_key` and `signature` in 003; 002 is also refused with `NIKA-SEC-006`: its secret key reaches `nika:hash` with no `egress:` sanction, which [01 §egress](spec/01-envelope.md#egress--optional--sanctioned-destinations-declassification) refuses, so that cause is the fixture's) · lints **7/7** at the only door + 25 NO-DOOR (`NIKA_BIN=… python3 scripts/lints-differential.py`) | `5cd95cd` | 2026-10-28 |
@@ -11306,7 +11306,7 @@ and `verbs/agent-injection-contained`.
    adapter (see the [runner protocol](conformance/runner-protocol.md)
    §Third-party mode). There is no built-in `conformance` subcommand to
    call on an engine.
-2. Open a PR on [supernovae-st/nika-spec](https://github.com/supernovae-st/nika-spec)
+2. Open a PR on [nika-open/nika-spec](https://github.com/nika-open/nika-spec)
    adding a row · include the spec commit you ran against and a reproducible
    command or CI link.
 3. Levels are claimed independently · `Core` alone is a valid claim.
@@ -11573,12 +11573,12 @@ Known deductions, tracked honestly:
 | CII-Best-Practices | badge not yet registered | §Best Practices above |
 
 Badge (after first published run) ·
-`[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/supernovae-st/nika-spec/badge)](https://scorecard.dev/viewer/?uri=github.com/supernovae-st/nika-spec)`
+`[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nika-open/nika-spec/badge)](https://scorecard.dev/viewer/?uri=github.com/nika-open/nika-spec)`
 
 ## Maintainer gestures (queued · settings-side · not automatable from here)
 
 1. **bestpractices.dev** — log in with GitHub · create the entry for
-   `supernovae-st/nika-spec` · the [.bestpractices.json](../.bestpractices.json)
+   `nika-open/nika-spec` · the [.bestpractices.json](../.bestpractices.json)
    shipped this wave pre-fills the answers.
 2. **Branch protection on `main`** — require PRs + the `static gate ·
    core + stdlib surface + examples` check (Scorecard's Branch-Protection
@@ -14042,7 +14042,7 @@ The canonical modes cover ~99% of real-world web fetch use cases. Niche extracti
 > of the language (like the stdlib). SPDX-License-Identifier: Apache-2.0
 >
 > Reference implementation:
-> [supernovae-st/nika-registry](https://github.com/supernovae-st/nika-registry).
+> [nika-open/nika-registry](https://github.com/nika-open/nika-registry).
 > This document is the contract; anyone can run a conformant registry —
 > an org-internal one, a mirror, a fork — and `nika add` (engine roadmap)
 > will speak to all of them identically.

@@ -25,7 +25,7 @@ except ImportError:
     sys.exit(2)
 
 ROOT = Path(__file__).resolve().parent.parent
-RAW = "https://raw.githubusercontent.com/supernovae-st/nika-spec/main"
+RAW = "https://raw.githubusercontent.com/nika-open/nika-spec/main"
 
 # Ordered projection sources for llms-full.txt · the normative reading path.
 FULL_ORDER = [
@@ -93,7 +93,7 @@ served the 2026-09-18 revision, without `nika:remove_file`, the `{{ file: }}`
 form of `prompt:`, `system:` and `schema:`, or `for_each.max_items`. For the
 exact schema an engine embeds, run `nika spec --schema`, or read it at that
 spec commit (`66dbdd6` for engine 0.124.4):
-`https://raw.githubusercontent.com/supernovae-st/nika-spec/66dbdd647b08d7c8594d966fa27e680ffb3fa11f/schemas/workflow.schema.json`
+`https://raw.githubusercontent.com/nika-open/nika-spec/66dbdd647b08d7c8594d966fa27e680ffb3fa11f/schemas/workflow.schema.json`
 
 ## Spec
 
@@ -141,7 +141,7 @@ one claim form, one governance door.
 - [Extract modes]({RAW}/stdlib/extract-modes-v0.1.md): the {c["extract_modes"]} `nika:fetch` extract modes
 - [Registry contract]({RAW}/registry/registry-v0.1.md): how artifacts are shared — entries, trust model, advisories
 - [Changelog]({RAW}/CHANGELOG.md): spec evolution log
-- [Reference engine](https://github.com/supernovae-st/nika): Rust · AGPL-3.0 · `brew install supernovae-st/tap/nika`
+- [Reference engine](https://github.com/nika-open/nika): Rust · AGPL-3.0 · `brew install nika-open/tap/nika`
 """
 
 

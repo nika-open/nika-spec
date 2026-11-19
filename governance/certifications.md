@@ -87,12 +87,12 @@ Known deductions, tracked honestly:
 | CII-Best-Practices | badge not yet registered | §Best Practices above |
 
 Badge (after first published run) ·
-`[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/supernovae-st/nika-spec/badge)](https://scorecard.dev/viewer/?uri=github.com/supernovae-st/nika-spec)`
+`[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nika-open/nika-spec/badge)](https://scorecard.dev/viewer/?uri=github.com/nika-open/nika-spec)`
 
 ## Maintainer gestures (queued · settings-side · not automatable from here)
 
 1. **bestpractices.dev** — log in with GitHub · create the entry for
-   `supernovae-st/nika-spec` · the [.bestpractices.json](../.bestpractices.json)
+   `nika-open/nika-spec` · the [.bestpractices.json](../.bestpractices.json)
    shipped this wave pre-fills the answers.
 2. **Branch protection on `main`** — require PRs + the `static gate ·
    core + stdlib surface + examples` check (Scorecard's Branch-Protection
