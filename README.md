@@ -25,7 +25,7 @@
   <a href="https://scorecard.dev/viewer/?uri=github.com/nika-open/nika-spec"><img src="https://api.scorecard.dev/projects/github.com/nika-open/nika-spec/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://github.com/nika-open/nika-spec/actions/workflows/codeql.yml"><img src="https://github.com/nika-open/nika-spec/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL"></a>
   <a href="https://github.com/nika-open/nika-spec/actions/workflows/reuse.yml"><img src="https://github.com/nika-open/nika-spec/actions/workflows/reuse.yml/badge.svg" alt="REUSE 3.3"></a>
-  <a href="https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/supernovae-st/nika-spec"><img src="https://archive.softwareheritage.org/badge/origin/https://github.com/supernovae-st/nika-spec/" alt="Archived by Software Heritage"></a>
+  <a href="https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/nika-open/nika-spec"><img src="https://archive.softwareheritage.org/badge/origin/https://github.com/nika-open/nika-spec/" alt="Archived by Software Heritage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0"></a>
 </p>
 
