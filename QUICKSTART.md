@@ -5,7 +5,7 @@
 > watch it grow.
 >
 > **Status** · authoring, static checking AND execution all work TODAY:
-> `brew install supernovae-st/tap/nika`, then `nika check` + `nika run` on
+> `brew install nika-open/tap/nika`, then `nika check` + `nika run` on
 > any file in this page. The spec text itself is v0.2.0-draft, the version
 > engine 0.124.4 embeds; the language family v1 is already frozen — there is
 > no `nika: v2`, ever.
@@ -226,7 +226,7 @@ Then, and only then, swap `model:` to a paid seat.
 
 ## 6 · Check it · run it
 
-With the reference engine installed (`brew install supernovae-st/tap/nika`) ·
+With the reference engine installed (`brew install nika-open/tap/nika`) ·
 
 ```bash
 nika check summarize-and-translate.nika   # static audit, before a single token is spent

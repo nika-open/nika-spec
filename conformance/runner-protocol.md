@@ -557,9 +557,9 @@ NIKA_BIN=<engine> python3 scripts/runtime-differential.py    # the behavioral ti
 
 ## Adoption
 
-Non-SuperNovae engines (Python · Go · TS) run this same suite to validate
-conformance · open a PR on `supernovae-st/nika-spec` to be listed in
-`CONFORMANT_IMPLEMENTATIONS.md`.
+Engines other than the reference implementation (Python · Go · TS) run
+this same suite to validate conformance · open a PR on
+`nika-open/nika-spec` to be listed in `CONFORMANT_IMPLEMENTATIONS.md`.
 
 ---
 

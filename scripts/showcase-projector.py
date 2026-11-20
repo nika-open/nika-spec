@@ -843,7 +843,7 @@ def main() -> int:
                             "v0.1 normative floor · engines may add codes within a "
                             "namespace · never repurpose). Code format "
                             "^NIKA-[A-Z]{2,9}(-[A-Z][A-Z0-9_]{1,15})?-[0-9]{3}$."),
-            "spec": "https://github.com/supernovae-st/nika-spec/blob/main/spec/05-errors.md",
+            "spec": "https://github.com/nika-open/nika-spec/blob/main/spec/05-errors.md",
             "namespaces": {n: {"scope": ns_scopes.get(n, ""), "range": "001-099"}
                            for n in canon["error_namespaces"]["items"]},
             "categories": canon["error_categories"]["items"],

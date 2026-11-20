@@ -16,6 +16,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Changed · the Nika repositories moved to the `nika-open` organization (2026-11-20)
+
+- The Nika repositories moved from the GitHub organization `supernovae-st`
+  to `nika-open` by repository transfer: history, issues, pull requests and
+  releases moved with them, and GitHub redirects the old addresses. The
+  README, AGENTS, CONTRIBUTING, QUICKSTART, CITATION.cff, 07 §Editor tooling
+  and §Claiming conformance, the registry contract, the runner protocol,
+  `llms.txt` and `llms-full.txt` give the `nika-open` addresses, the
+  `nika-open/tap` Homebrew tap and the `@nika-open/nika` npm package. The
+  `bookmark-triage` example fetches `https://github.com/nika-open/nika`.
+- The schema address 07 §Editor tooling pins at `66dbdd6` for engine
+  0.124.4 reads `raw.githubusercontent.com/nika-open/nika-spec/…` and serves
+  the same bytes. The schema `$id` and every rule, fixture and verdict are
+  unchanged.
+- Records keep the address of their day: released sections of this file,
+  ADRs, timeline entries, conformance fixtures and findings, the superseded
+  rows of `CONFORMANT_IMPLEMENTATIONS.md`, the retired Project archive's
+  identities and the provenance of the estate projection still name
+  `supernovae-st`.
+
 ### Changed · engine 0.124.4 is the current release (2026-11-12)
 
 - The README, CONTRIBUTING, SECURITY, the QUICKSTART status line and 00

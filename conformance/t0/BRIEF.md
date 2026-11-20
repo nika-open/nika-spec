@@ -8,7 +8,7 @@
 
 ## What you get (nothing else)
 
-- this repository (`supernovae-st/nika-spec`) — the spec text, the
+- this repository (`nika-open/nika-spec`) — the spec text, the
   JSON schema, the NEPs
 - the conformance fixtures, selected mechanically by the `t0` tier:
 

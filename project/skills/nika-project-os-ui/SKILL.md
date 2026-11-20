@@ -8,7 +8,7 @@ description: Inspect the historical Nika GitHub Project without restoring its re
 # Historical Nika Project
 
 Current priorities and tasks are tracked privately by the maintainers; public
-issues and pull requests go to <https://github.com/supernovae-st/nika/issues>.
+issues and pull requests go to <https://github.com/nika-open/nika/issues>.
 GitHub issues remain public contribution intake; pull requests, CI and releases
 remain the code and publication evidence. This Project is an archive.
 

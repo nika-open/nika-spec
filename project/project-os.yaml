@@ -9,7 +9,7 @@ lifecycle:
   status: retired
   retired_on: "2026-10-07"
   planning: private
-  public_intake_url: "https://github.com/supernovae-st/nika/issues"
+  public_intake_url: "https://github.com/nika-open/nika/issues"
   reason: "The maintainers track current priorities and tasks privately; GitHub keeps public contribution intake, code, review, CI and releases."
 
 visual_grammar:
@@ -40,7 +40,7 @@ project:
     ## Historical Nika Project
 
     Current priorities and tasks are tracked privately by the maintainers;
-    public issues go to https://github.com/supernovae-st/nika/issues.
+    public issues go to https://github.com/nika-open/nika/issues.
     This GitHub Project preserves earlier records; its cards and views no longer
     describe current activity. Public contributions remain welcome through
     GitHub issues and pull requests. Code, reviews, checks and releases remain

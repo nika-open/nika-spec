@@ -10,7 +10,7 @@ authors:
     website: "https://supernovae.studio"
   - family-names: "Melen"
     given-names: "Thibaut"
-repository-code: "https://github.com/supernovae-st/nika-spec"
+repository-code: "https://github.com/nika-open/nika-spec"
 url: "https://nika.sh"
 license: Apache-2.0
 keywords:
@@ -27,12 +27,12 @@ abstract: >-
   expression syntax, a typed error model), with a machine-checkable
   conformance suite, a canonical JSON Schema, and a governed evolution
   process (NEPs). The reference
-  engine is a separate repository (supernovae-st/nika,
+  engine is a separate repository (nika-open/nika,
   AGPL-3.0-or-later).
 references:
   - type: software
     title: "Nika reference engine (nika)"
-    repository-code: "https://github.com/supernovae-st/nika"
+    repository-code: "https://github.com/nika-open/nika"
     license: AGPL-3.0-or-later
     authors:
       - name: "SuperNovae Studio"

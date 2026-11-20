@@ -107,7 +107,7 @@ showcase:
   - file: examples/bookmark-triage.nika
     name: bookmark-triage
     constructs: [fail_fast, for_each, max_parallel, on_error, outputs, retry, with]
-    sha256_16: 8dd0a12b1fad12ba
+    sha256_16: 2805e2f7505b9b73
   - file: examples/ceo-monday-brief.nika
     name: ceo-monday-brief
     constructs: [extract, local_model, on_error, outputs, secrets, typed_inputs, when, with]

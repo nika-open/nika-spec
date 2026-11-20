@@ -1,6 +1,6 @@
 {
   "name": "nika-spec",
-  "repo_url": "https://github.com/supernovae-st/nika-spec",
+  "repo_url": "https://github.com/nika-open/nika-spec",
   "general_comments": "Machine-readable self-assessment for the OpenSSF Best Practices (passing) badge. The authoritative, human-readable version with evidence links is governance/certifications.md, section 'OpenSSF Best Practices'. Only criteria this project can answer honestly are recorded here; criteria left unset are intentionally omitted.",
   "description_good_status": "Met",
   "description_good_justification": "The README's opening states what Nika is (a workflow-language specification) and the problem it solves.",

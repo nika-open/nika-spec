@@ -24,7 +24,7 @@ class RetirementTests(unittest.TestCase):
                  contextlib.redirect_stderr(io.StringIO()) as message:
                 self.assertEqual(cli.main(arguments), 2)
                 self.assertIn("retired", message.getvalue())
-                self.assertIn("https://github.com/supernovae-st/nika/issues", message.getvalue())
+                self.assertIn("https://github.com/nika-open/nika/issues", message.getvalue())
                 self.assertNotIn(PRIVATE_HOST, message.getvalue())
                 client.assert_not_called()
 
@@ -51,7 +51,7 @@ class RetirementTests(unittest.TestCase):
              patch("project.verify.GitHub"), \
              contextlib.redirect_stderr(io.StringIO()) as message:
             self.assertEqual(verify.main([]), 2)
-        self.assertIn("https://github.com/supernovae-st/nika/issues", message.getvalue())
+        self.assertIn("https://github.com/nika-open/nika/issues", message.getvalue())
         self.assertNotIn(PRIVATE_HOST, message.getvalue())
 
     def test_public_archive_links_no_private_workspace(self) -> None:

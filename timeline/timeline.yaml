@@ -32,9 +32,9 @@ verifier: timeline/verify.py
 
 evidence_classes:
   git-tag: "a tag in THIS repo (nika-spec) · verified locally"
-  github-release: "a release tag on a public supernovae-st repo · verified via the GitHub API"
-  github-commit: "a commit on a public supernovae-st repo · verified via the GitHub API"
-  github-pr: "a merged PR on a public supernovae-st repo · verified via the GitHub API"
+  github-release: "a release tag on a public Nika repo (nika-open · supernovae-st before the 2026-11-20 move) · verified via the GitHub API"
+  github-commit: "a commit on a public Nika repo (nika-open · supernovae-st before the 2026-11-20 move) · verified via the GitHub API"
+  github-pr: "a merged PR on a public Nika repo (nika-open · supernovae-st before the 2026-11-20 move) · verified via the GitHub API"
   crates-io: "a published version on crates.io (yanked versions remain listed forever) · verified via the crates.io API"
   scorecard: "an OpenSSF Scorecard result · verified via the scorecard API (score moves weekly · the entry records a dated reading)"
   private-archive: "a commit/tag in the private legacy archive (the brouillon branch) · SHA recorded · auditable under access, not publicly resolvable"

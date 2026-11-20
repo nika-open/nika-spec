@@ -3,7 +3,7 @@
 Current priorities and tasks are tracked privately by the maintainers.
 The former GitHub Project is a historical archive, not a second kanban.
 Public contributions remain welcome through GitHub issues and pull requests
-(<https://github.com/supernovae-st/nika/issues>); code, review, CI and
+(<https://github.com/nika-open/nika/issues>); code, review, CI and
 releases remain in their owning repositories.
 
 `project-os.yaml` records the archived fields, source identities and views.

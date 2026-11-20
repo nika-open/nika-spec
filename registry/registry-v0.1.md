@@ -5,7 +5,7 @@
 > of the language (like the stdlib). SPDX-License-Identifier: Apache-2.0
 >
 > Reference implementation:
-> [supernovae-st/nika-registry](https://github.com/supernovae-st/nika-registry).
+> [nika-open/nika-registry](https://github.com/nika-open/nika-registry).
 > This document is the contract; anyone can run a conformant registry —
 > an org-internal one, a mirror, a fork — and `nika add` (engine roadmap)
 > will speak to all of them identically.
