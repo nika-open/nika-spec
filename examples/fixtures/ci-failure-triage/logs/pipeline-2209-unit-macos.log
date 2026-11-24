@@ -1,0 +1,7 @@
+[2026-11-23T12:20:19Z] INFO  job unit · macos-arm64 · runner ci-runner-11
+[2026-11-23T12:20:20Z] INFO  commit 9e1d0a4 · branch main · 412 tests
+[2026-11-23T12:22:47Z] INFO  PASS ledger::rounding::half_up (0.02s)
+[2026-11-23T12:22:47Z] ERROR test ledger::rounding::half_even failed: expected 10.04, got 10.05
+[2026-11-23T12:22:47Z] INFO    input: amount=10.045 currency=EUR mode=half_even
+[2026-11-23T12:22:48Z] INFO    changed in this push: src/ledger/rounding.rs (+6 -2)
+[2026-11-23T12:23:31Z] INFO  411 passed · 1 failed · exit 1

@@ -1,0 +1,8 @@
+[2026-11-23T12:10:40Z] INFO  job build · linux-x64 · runner ci-runner-09
+[2026-11-23T12:10:41Z] INFO  commit 9e1d0a4 · branch main
+[2026-11-23T12:10:52Z] INFO  restoring dependency cache (2.1 GB)
+[2026-11-23T12:12:30Z] INFO  compiling 214 units
+[2026-11-23T12:16:05Z] ERROR runner: write failed: No space left on device (os error 28) at /work/build/obj/ledger_rounding.o
+[2026-11-23T12:16:05Z] INFO    disk /work is 100% used (40 GB of 40 GB)
+[2026-11-23T12:16:05Z] INFO    the cache restore alone took 2.1 GB of it
+[2026-11-23T12:16:06Z] INFO  exit 101
