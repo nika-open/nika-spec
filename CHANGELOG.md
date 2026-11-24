@@ -26,17 +26,21 @@ engine at its next `SPEC_PIN` bump.
   own ticket and takes its decision from the record. No ticket crosses a
   run, and every refusal of clause (2) reads as before.
 - The exception holds under ten clauses: a separate act of a person, never
-  a default, a policy or an agent; the content hash and a world hash, any
-  difference re-prompting; a list of what the record does not cover, kept
-  in the record; an expiry, 31 days by default, that cannot be removed
-  where `permits:` let the workflow send data out; a `permits:` block and
-  a named effect level; a cost ceiling per run; one copy with the project
-  and one with the operator, valid only where they agree; gates the
-  lethal-trifecta law requires, with a plain sentence at grant time; a
-  `consent_reused` event beside `approval_decided`, its source named
-  `standing`; revocation for the runs that follow. A gate passed on a
-  record counts among the five approvals of a run. The chapter also says
-  what the exception does not claim.
+  a default, a policy or an agent; the step, the content hash and a world
+  hash, any difference re-prompting, the workflow bound by at least its
+  semantic hash; a list of what the record does not cover, kept in the
+  record; an expiry, 31 days by default, that cannot be removed where
+  `permits:` let the workflow send data out or launch programs; a
+  `permits:` block and one of four effect levels, the cost ceiling stated
+  beside it; a cost ceiling per run; one copy with the project and one
+  with the operator, valid only where they agree in every field; gates
+  the lethal-trifecta law requires, with a plain sentence at grant time;
+  two event kinds as the attestation, `approval_decided` with its source
+  named `standing` and `consent_reused`; revocation for the runs that
+  follow, carried by the operator's copy. A gate passed on a record counts
+  among the five approvals of a run. The chapter also says what the
+  exception does not claim. Chapter 17's kind vocabulary is unchanged: it
+  gains both kinds when a reference engine emits them.
 - An engine may offer standing consent and is not required to. Without a
   record the law is unchanged, and no diagnostic code is added.
 - The reference engine does not implement standing consent. The law is
