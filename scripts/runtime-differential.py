@@ -490,7 +490,7 @@ def fixture_door(directory: pathlib.Path) -> str:
     if len(claims) != 1:
         raise InvalidFixture("fixture requires exactly one behavioral expectation")
     claim = claims.pop()
-    if claim in {"expected-approval.json", "expected-http.json",
+    if claim in {"expected-approval.json", "expected-consent.json", "expected-http.json",
                  "expected-compose.json", "expected-export.json"}:
         # A separate, fully validated observation contract never falls through
         # to run or verify. Load the pure validator only for these new doors.

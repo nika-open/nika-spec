@@ -14,6 +14,7 @@ A directory contains exactly one of these expectation documents and its input:
 | Expectation | Input | Required adapter capability |
 |---|---|---|
 | `expected-approval.json` | `input.nika` | `approval-session-v1` |
+| `expected-consent.json` | `input.nika` | `standing-consent-v1` |
 | `expected-http.json` | `input.nika` | `http-transport-v1` |
 | `expected-compose.json` | `draft.nika` | `compose-intrinsic-v1` |
 | `expected-export.json` | `input.nika` | `secret-export-v1` |
@@ -102,6 +103,71 @@ An affirmative answer permits exactly one gated effect; denial permits zero.
 The pair distinguishes single-use protection from an engine that blocks every
 approval. It does not weaken existing content binding, TTL, cross-run refusal
 or affirmative-consent laws, whose other cases retain their own coverage gaps.
+
+## Standing consent
+
+Owner: `spec/10-authority.md#the-two-judges-that-remain`.
+
+Standing consent is the one exception to fresh consent, and an engine may
+offer it or not. An implementation that never grants a record cannot qualify
+this capability and loses nothing by it: asking again is always conformant.
+These cases bind an engine that does grant records.
+
+`given` has `changed` (`none`, `workflow`, `permits`, `model`, `input`,
+`read-file`), `tested`, `operator_store` (`same`, `other`), `answer` (`none`),
+integer `now_ms`/`expires_ms`, never equal, and `effect_path`
+(`out/approved.txt`). `expires_ms` is the record's expiry on the injected
+clock; the expiry instant itself is not pinned. All stores and locations name
+adapter-created fixture identities; they never resolve to the operator's
+actual directories.
+
+`tested` is the world of the tested leg and has exactly `workflow`
+(`input.nika`, `changed.nika`), `model` (`mock/echo`, `mock/text`), `subject`
+(`alpha`, `beta`) and `notes` (`alpha\n`, `beta\n`): the workflow file that
+runs, the model its `draft` task resolves, the value of its `subject` input
+and the bytes of `data/notes.txt`, which the adapter stages in the synthetic
+project. The granted world is `input.nika`, `mock/echo`, `alpha`, `alpha\n`.
+`tested` equals it when `changed` is `none`, and otherwise differs in exactly
+the member `changed` names. A `workflow` or `permits` case carries
+`changed.nika` beside its input: the same workflow with one edit, outside
+`permits:` for `workflow` and inside it for `permits`. In any other case that
+file is an orphan and the contract is invalid. The `model` case leaves the
+workflow bytes alone: the adapter makes the tested leg resolve the other model
+through the implementation's own run-level override.
+
+The seed leg runs the granted world in a fresh project and a fresh operator
+store, injects an affirmative answer at the gate, and then grants the record
+through the implementation's grant surface, as the separate act the law
+requires. It retains the record, both hashes and the first gated effect. The
+tested leg is a new run of the tested world, at `now_ms`, with no answer
+supplied. `other` gives that leg the project, with its copy of the record, and
+a fresh operator store: a project copy without the operator's own copy. A case
+varies one premise: a changed member, the other store or a clock past the
+expiry, never two.
+
+`observations` has `reuse` (`applied`, `not-applied`), boolean `re_prompted`,
+and integer `new_decisions`/`reuse_attested`/`gated_effects`. Counts refer
+only to the tested leg, excluding the seed. `re_prompted` is true when the
+gate asks: with no answer supplied, the run pauses there. `new_decisions`
+counts the decisions the tested leg records from any source other than the
+record. `reuse_attested` counts the reuse attestations in its trace
+(`consent_reused`). Count effects at the dispatch boundary as for an approval
+session.
+
+With nothing changed, the same store and an unexpired record, the leg applies
+the record: it does not re-prompt, records zero new decisions, attests exactly
+one reuse and issues exactly one gated effect. Every other case does not apply
+it: the gate re-prompts, and the leg records zero new decisions, zero reuse
+attestations and zero gated effects. An unchanged final file cannot prove
+that, and a run that fails before its gate proves nothing either: the adapter
+must observe the pause at the gate.
+
+These eight cases pin the applicability of a record. They do not observe an
+explicit refusal winning over a record, revocation, the refusals at grant time
+(no `permits:` block, a grant by default, by policy or by an agent), the
+content of the not-covered list, the expiry that cannot be removed, the cost
+ceiling, the count against the approval limit, or a changed child workflow,
+skill or MCP pin. Those clauses stay unqualified until their own cases exist.
 
 ## HTTP transport
 

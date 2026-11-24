@@ -1,0 +1,27 @@
+{
+  "contract_version": 1,
+  "law": "spec/10-authority.md#the-two-judges-that-remain",
+  "input": "input.nika",
+  "given": {
+    "changed": "none",
+    "tested": {
+      "workflow": "input.nika",
+      "model": "mock/echo",
+      "subject": "alpha",
+      "notes": "alpha\n"
+    },
+    "operator_store": "same",
+    "answer": "none",
+    "now_ms": 3000,
+    "expires_ms": 2000,
+    "effect_path": "out/approved.txt"
+  },
+  "observations": {
+    "reuse": "not-applied",
+    "re_prompted": true,
+    "new_decisions": 0,
+    "reuse_attested": 0,
+    "gated_effects": 0
+  },
+  "note": "The seed leg grants the record on the granted world; the tested leg supplies no answer. Stores and project are isolated fixture locations. No ambient approval, record, real user or home directory is used."
+}

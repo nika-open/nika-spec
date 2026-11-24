@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pure admission of adapter-dependent conformance data; never an engine verdict.
 
-These closed contracts describe observations at four doors. This module has no
+These closed contracts describe observations at five doors. This module has no
 process, socket, provider or engine imports. Valid data still needs an adapter.
 """
 from __future__ import annotations
@@ -12,17 +12,26 @@ from urllib.parse import urlsplit, urlunsplit
 
 DOORS = {
     "expected-approval.json": "approval-session-v1",
+    "expected-consent.json": "standing-consent-v1",
     "expected-http.json": "http-transport-v1",
     "expected-compose.json": "compose-intrinsic-v1",
     "expected-export.json": "secret-export-v1",
 }
 LAWS = {
     "approval-session-v1": "spec/10-authority.md#the-two-judges-that-remain",
+    "standing-consent-v1": "spec/10-authority.md#the-two-judges-that-remain",
     "http-transport-v1": "stdlib/builtins-v0.1.md#nikafetch",
     "compose-intrinsic-v1": "stdlib/builtins-v0.1.md#nikacompose--self-check-a-drafted-workflow-agent-loops-only",
     "secret-export-v1": "spec/01-envelope.md#egress--optional--sanctioned-destinations-declassification",
 }
 SURFACES = ["stdout", "stderr", "journal", "trace-outputs"]
+# The world a standing consent record is granted in, and the one member each
+# named change replaces in the tested leg.
+GRANTED_WORLD = {"workflow": "input.nika", "model": "mock/echo", "subject": "alpha",
+                 "notes": "alpha\n"}
+WORLD_CHANGES = {"workflow": ("workflow", "changed.nika"), "permits": ("workflow", "changed.nika"),
+                 "model": ("model", "mock/text"), "input": ("subject", "beta"),
+                 "read-file": ("notes", "beta\n")}
 
 
 def require(condition, message):
@@ -110,6 +119,41 @@ def approval(given, observed):
                              "new_decisions": 1,
                              "gated_effects": int(given["answer"] == "affirmative")},
                 "fresh approval and denial must be distinguished")
+
+
+def consent(given, observed):
+    fields(given, {"changed", "tested", "operator_store", "answer", "now_ms", "expires_ms",
+                   "effect_path"})
+    choice(given["changed"], {"none", *WORLD_CHANGES})
+    fields(given["tested"], set(GRANTED_WORLD))
+    for value in given["tested"].values():
+        text(value)
+    world = dict(GRANTED_WORLD)
+    if given["changed"] != "none":
+        member, value = WORLD_CHANGES[given["changed"]]
+        world[member] = value
+    require(given["tested"] == world, "the tested world differs only in the named member")
+    choice(given["operator_store"], {"same", "other"})
+    require(given["answer"] == "none", "a standing case supplies no answer")
+    integer(given["now_ms"]); integer(given["expires_ms"])
+    require(given["now_ms"] != given["expires_ms"], "the expiry instant itself is not pinned")
+    require(given["effect_path"] == "out/approved.txt", "unknown effect target")
+    premises = [given["changed"] != "none", given["operator_store"] == "other",
+                given["now_ms"] > given["expires_ms"]]
+    require(sum(premises) <= 1, "one case varies one premise of the record")
+    fields(observed, {"reuse", "re_prompted", "new_decisions", "reuse_attested", "gated_effects"})
+    choice(observed["reuse"], {"applied", "not-applied"})
+    boolean(observed["re_prompted"])
+    integer(observed["new_decisions"]); integer(observed["reuse_attested"])
+    integer(observed["gated_effects"])
+    if any(premises):
+        require(observed == {"reuse": "not-applied", "re_prompted": True, "new_decisions": 0,
+                             "reuse_attested": 0, "gated_effects": 0},
+                "a changed world, an expired record or a missing operator copy re-prompts")
+    else:
+        require(observed == {"reuse": "applied", "re_prompted": False, "new_decisions": 0,
+                             "reuse_attested": 1, "gated_effects": 1},
+                "an unchanged world proceeds once on the record, attested as a reuse")
 
 
 def policy_valid(policy):
@@ -292,9 +336,17 @@ def validate(directory: Path, claim: str) -> str:
     require(document["input"] == expected_input, "wrong input for this door")
     fixture_file(directory, document["input"])
     require(not (directory / "run.json").exists(), "an observation fixture cannot also request a run")
-    handlers = {"expected-approval.json": approval, "expected-http.json": http,
-                "expected-compose.json": compose, "expected-export.json": export}
+    handlers = {"expected-approval.json": approval, "expected-consent.json": consent,
+                "expected-http.json": http, "expected-compose.json": compose,
+                "expected-export.json": export}
     handlers[claim](document["given"], document["observations"])
+    if claim == "expected-consent.json":
+        if document["given"]["tested"]["workflow"] == "changed.nika":
+            fixture_file(directory, "changed.nika")
+            require((directory / "changed.nika").read_bytes() != (directory / "input.nika").read_bytes(),
+                    "changed-workflow premise is false")
+        else:
+            require(not (directory / "changed.nika").exists(), "orphan changed workflow")
     if claim == "expected-compose.json" and document["given"]["case"] == "missing-child":
         require(not (directory / "absent-child.nika").exists(), "missing-child premise is false")
     return capability

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fixture admission and discovery only; subprocess is forbidden in every test."""
 import contextlib
+import functools
 import importlib.util
 import io
 import json
@@ -24,8 +25,9 @@ contracts = source('observation_contracts')
 CORPUS = Path(__file__).resolve().parent.parent / 'conformance/tests'
 
 
+@functools.lru_cache(maxsize=None)
 def fixtures():
-    return sorted(p for name in contracts.DOORS for p in CORPUS.rglob(name))
+    return tuple(sorted(p for name in contracts.DOORS for p in CORPUS.rglob(name)))
 
 
 class ObservationAdmission(unittest.TestCase):
@@ -150,6 +152,74 @@ class ObservationAdmission(unittest.TestCase):
         directory, document = self.copy_fixture('expected-approval.json', 'fresh-denial')
         document['observations']['gated_effects'] = 1
         self.rejected(directory, 'expected-approval.json', document)
+
+    def test_a_record_never_reaches_a_changed_world(self):
+        for fragment in ['workflow-change', 'permits-change', 'model-change', 'input-change',
+                         'read-file-change', 'expired-record', 'without-twin']:
+            for field, value in [('gated_effects', 1), ('reuse', 'applied'), ('re_prompted', False),
+                                 ('reuse_attested', 1), ('new_decisions', 1)]:
+                directory, document = self.copy_fixture('expected-consent.json', fragment)
+                document['observations'][field] = value
+                with self.subTest(case=fragment, field=field):
+                    self.rejected(directory, 'expected-consent.json', document)
+
+    def test_a_reuse_is_attested_and_decides_nothing_new(self):
+        for field, value in [('reuse_attested', 0), ('new_decisions', 1), ('gated_effects', 2),
+                             ('gated_effects', True), ('re_prompted', True), ('reuse', 'not-applied')]:
+            directory, document = self.copy_fixture('expected-consent.json', 'unchanged-world')
+            document['observations'][field] = value
+            with self.subTest(field=field):
+                self.rejected(directory, 'expected-consent.json', document)
+        directory, document = self.copy_fixture('expected-consent.json', 'unchanged-world')
+        document['given']['answer'] = 'affirmative'
+        self.rejected(directory, 'expected-consent.json', document)
+
+    def test_one_standing_case_varies_one_premise(self):
+        for path, value in [(('operator_store',), 'other'), (('now_ms',), 3000), (('now_ms',), 2000),
+                            (('tested', 'model'), 'mock/text'), (('tested', 'notes'), 'alpha\n'),
+                            (('tested', 'secret'), 'unlisted'), (('changed',), 'none')]:
+            directory, document = self.copy_fixture('expected-consent.json', 'read-file-change')
+            target = document['given']
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            with self.subTest(path=path, value=value):
+                self.rejected(directory, 'expected-consent.json', document)
+
+    def test_a_changed_workflow_is_a_file_premise(self):
+        for fragment in ['workflow-change', 'permits-change']:
+            directory, document = self.copy_fixture('expected-consent.json', fragment)
+            with self.assertRaises(runner.UnsupportedFixture):
+                runner.fixture_door(directory)
+            (directory/'changed.nika').write_bytes((directory/'input.nika').read_bytes())
+            self.rejected(directory, 'expected-consent.json', document)
+            (directory/'changed.nika').unlink()
+            self.rejected(directory, 'expected-consent.json', document)
+        directory, document = self.copy_fixture('expected-consent.json', 'unchanged-world')
+        (directory/'changed.nika').write_text('nika: orphan\n')
+        self.rejected(directory, 'expected-consent.json', document)
+
+    def test_published_standing_cases_share_one_granted_world(self):
+        def body(path):
+            return json.loads(path.read_text().split('\n', 1)[1])
+        cases = [p.parent for p in fixtures() if p.name == 'expected-consent.json']
+        given = [json.loads((case/'expected-consent.json').read_text())['given'] for case in cases]
+        self.assertEqual(len({(case/'input.nika').read_bytes() for case in cases}), 1)
+        self.assertEqual(sorted(g['changed'] for g in given if g['changed'] != 'none'),
+                         sorted(contracts.WORLD_CHANGES))
+        self.assertEqual(sum(g['operator_store'] == 'other' for g in given), 1)
+        self.assertEqual(sum(g['now_ms'] > g['expires_ms'] for g in given), 1)
+        self.assertEqual(sum(g == dict(given[0], changed='none', tested=contracts.GRANTED_WORLD,
+                                       operator_store='same', now_ms=1000) for g in given), 1)
+        for case, change in zip(cases, given):
+            if change['changed'] in {'workflow', 'permits'}:
+                granted, tested = body(case/'input.nika'), body(case/'changed.nika')
+                same_permits = granted['permits'] == tested['permits']
+                same_rest = ({k: v for k, v in granted.items() if k != 'permits'}
+                             == {k: v for k, v in tested.items() if k != 'permits'})
+                with self.subTest(case=case.name):
+                    self.assertEqual((same_permits, same_rest),
+                                     (change['changed'] == 'workflow', change['changed'] == 'permits'))
 
     def test_refusal_cannot_send_and_success_cannot_retry(self):
         for fragment, field, value in [('resolved-null', 'requests', 1),

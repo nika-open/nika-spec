@@ -124,9 +124,10 @@ proven at the door) · and six adopted the `mock(echo) · ` output marker
 the spec's own examples already teach.)
 
 The adapter-dependent [observation contracts](tests/runtime/observation-contracts.md)
-add four explicitly collected doors: approval sessions, HTTP transport, the
-compose intrinsic and secret exports. Their entire closed declaration and
-input premises are validated before classification. Valid cases are
+add five explicitly collected doors: approval sessions, standing consent,
+HTTP transport, the compose intrinsic and secret exports. Their entire
+closed declaration and input premises are validated before classification.
+Valid cases are
 `UNSUPPORTED` before any engine command; malformed declarations are
 `FIXTURE-ERROR`. They specify behavior but are not Runtime agreement. The
 separate command adapter and its observation decoder/judge must be qualified
