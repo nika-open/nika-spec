@@ -16,6 +16,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Changed · the argv floor refuses a recursive delete that leaves the working directory (2026-11-24)
+
+- 02 §exec Security now states the argv floor of `command:`: it is judged by
+  structure (program identity, an interpreter's inline-eval form, and a
+  recursive delete), never by joined text. A recursive delete is `rm` with a
+  recursive flag or `find` with `-delete`; it is refused when its target is
+  absolute (a Windows drive prefix included) or climbs above the working
+  directory with `..`. A literal argv is a `NIKA-SEC-001` finding at check
+  and the same refusal at run. Every simple command of a `shell:` line
+  follows the same rule, whatever separates or precedes it, so `rm -fr /x`
+  and `true & rm -fr /x` meet the refusal `rm -rf /x` does. A delete inside the working directory
+  stays admitted.
+- Why: the exec split of 2026-07-13 (#78) turned
+  `envelope/sec-exec-blocklist-rm-rf` from the string `rm -rf /tmp/…` into
+  argv, and no normative text described the argv floor the case relies on.
+- Corpus: the case keeps its expectation, with its comment rewritten. Three
+  twins: `envelope/sec-exec-recursive-delete-escape` (a `..` target,
+  refused), `envelope/sec-exec-recursive-delete-inside` (a relative target,
+  admitted) and `envelope/sec-exec-shell-recursive-delete-spelling`
+  (`rm -fr` on a `shell:` line, refused at run).
+
 ### Changed · `NIKA-SEC-009` credits a choice or input gate only where its answer is tested (2026-11-24)
 
 - 05 said any blocking `nika:prompt` (no `default:`) that dominates the

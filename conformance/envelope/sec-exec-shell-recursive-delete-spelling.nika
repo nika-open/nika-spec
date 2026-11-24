@@ -1,0 +1,15 @@
+# Expected: NIKA-SEC-001 at RUN.
+# Every simple command of a `shell:` line is judged by the argv floor's
+# recursive-delete rule (02 §exec Security), not only by the blocklist's
+# literal `rm -rf /` pattern: `rm -fr` on an absolute target is the same
+# delete and meets the same refusal. The shell form makes no static claim, so
+# the refusal comes at run.
+nika: sec11d-exec-shell-recursive-delete-spelling
+
+permits:
+  exec: true
+
+tasks:
+  attack:
+    exec:
+      shell: "rm -fr /tmp/nonexistent-xyz-nika-test"
