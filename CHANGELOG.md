@@ -88,6 +88,12 @@ engine at its next `SPEC_PIN` bump.
   `release-0-125-0` (published `2026-11-24T16:24:20Z` as release
   `457015659`, from engine commit `1261da75a`) and
   `current-release-line-0-125`, proved live by `timeline/verify.py`.
+- `CONFORMANT_IMPLEMENTATIONS.md` gains a 0.125.0 row, measured at
+  `2edc285` with the released macOS arm64 binary, and a 0.124.5 row,
+  measured at `25078e7`. Two runs from fresh checkouts gave identical
+  verdicts, and every fixture keeps the verdict of 0.124.4: static sweep
+  453/460, runtime 126 agree and 9 diverge, lints 7/7, `run.sh` 91 PASS,
+  10 DRIFT, 0 DIVERGENT and 5 BUG.
 
 ### Changed · `NIKA-SEC-009` credits a choice or input gate only where its answer is tested (2026-11-24)
 
