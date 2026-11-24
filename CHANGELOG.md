@@ -31,10 +31,13 @@ engine at its next `SPEC_PIN` bump.
   semantic hash; a list of what the record does not cover, kept in the
   record; an expiry, 31 days by default, that cannot be removed where
   `permits:` let the workflow send data out or launch programs; a
-  `permits:` block and one of four effect levels, the cost ceiling stated
-  beside it; a cost ceiling per run; one copy with the project and one
-  with the operator, valid only where they agree in every field; gates
-  the lethal-trifecta law requires, with a plain sentence at grant time;
+  `permits:` block and one of five ordered effect levels, the highest the
+  block reaches, where a write glob that can leave the project root is
+  *writes outside the project* and an `mcp:` tool grant is *sends out*,
+  the cost ceiling stated beside it; a cost ceiling per run; one copy with
+  the project and one with the operator, valid only where they agree in
+  every field; gates the lethal-trifecta law requires, with a plain
+  sentence at grant time;
   two event kinds as the attestation, `approval_decided` with its source
   named `standing` and `consent_reused`; revocation for the runs that
   follow, carried by the operator's copy. A gate passed on a record counts

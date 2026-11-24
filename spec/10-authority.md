@@ -253,11 +253,19 @@ bound by the record. An expired record does not apply and the gate
 re-prompts
 · (e) **`permits:` required** — a workflow with no `permits:` block
 MUST NOT receive a record. The record names the **effect level** it
-lets through, one of *reads only* · *writes inside the project* ·
-*sends out* · *launches programs*, in that ascending order: the
-highest its `permits:` block allows, computed from that block alone.
-It states its cost ceiling (f) beside the level. A record never widens
-`permits:`
+lets through, one of five in ascending order: *reads only* · *writes
+inside the project* · *writes outside the project* · *sends out* ·
+*launches programs*. The level is computed from the `permits:` block
+alone, and the record MUST state the highest one the block reaches,
+never a lower one. A `permits.fs.write` glob that can match a path
+outside the project root puts the record at *writes outside the
+project* at least: outside is read lexically against the project root
+the workflow resolves against, as the path laws do
+([02](./02-verbs.md) · an absolute or `~` form, or a leading `..` once
+`.` and `..` are resolved). An `mcp:` tool grant reads as *sends out*,
+so the expiry of (d) stays, because the record cannot bound what a
+tool server does with what it receives. The record states its cost
+ceiling (f) beside the level. A record never widens `permits:`
 · (f) **a cost ceiling per run** — the record carries a cost ceiling,
 and every run it lets through is capped at it (the run's cost cap ·
 [13](./13-outcomes.md) · cause `budget`); it never raises a cap the
