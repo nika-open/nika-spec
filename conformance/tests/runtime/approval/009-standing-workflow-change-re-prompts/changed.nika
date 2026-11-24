@@ -37,7 +37,7 @@
         "notes": "${{ tasks.notes.output }}"
       },
       "infer": {
-        "prompt": "Summarize ${{ inputs.subject }}: ${{ with.notes }}",
+        "prompt": "Translate ${{ inputs.subject }}: ${{ with.notes }}",
         "max_tokens": 256
       }
     },
@@ -61,7 +61,7 @@
         "tool": "nika:write",
         "args": {
           "path": "./out/approved.txt",
-          "content": "approved again\n"
+          "content": "approved\n"
         }
       }
     }

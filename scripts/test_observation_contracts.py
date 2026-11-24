@@ -155,7 +155,7 @@ class ObservationAdmission(unittest.TestCase):
 
     def test_a_record_never_reaches_a_changed_world(self):
         for fragment in ['workflow-change', 'permits-change', 'model-change', 'input-change',
-                         'read-file-change', 'expired-record', 'without-twin']:
+                         'read-file-change', 'expired-record', 'without-twin', 'revoked-record']:
             for field, value in [('gated_effects', 1), ('reuse', 'applied'), ('re_prompted', False),
                                  ('reuse_attested', 1), ('new_decisions', 1)]:
                 directory, document = self.copy_fixture('expected-consent.json', fragment)
@@ -174,8 +174,24 @@ class ObservationAdmission(unittest.TestCase):
         document['given']['answer'] = 'affirmative'
         self.rejected(directory, 'expected-consent.json', document)
 
+    def test_an_explicit_refusal_decides_over_a_record_that_applies(self):
+        for field, value in [('gated_effects', 1), ('reuse', 'applied'), ('reuse_attested', 1),
+                             ('new_decisions', 0), ('re_prompted', True)]:
+            directory, document = self.copy_fixture('expected-consent.json', 'explicit-refusal')
+            document['observations'][field] = value
+            with self.subTest(field=field):
+                self.rejected(directory, 'expected-consent.json', document)
+        for path, value in [(('record',), 'revoked'), (('operator_store',), 'other'),
+                            (('now_ms',), 3000), (('answer',), 'affirmative'),
+                            (('record',), 'granted')]:
+            directory, document = self.copy_fixture('expected-consent.json', 'explicit-refusal')
+            document['given'][path[0]] = value
+            with self.subTest(path=path, value=value):
+                self.rejected(directory, 'expected-consent.json', document)
+
     def test_one_standing_case_varies_one_premise(self):
         for path, value in [(('operator_store',), 'other'), (('now_ms',), 3000), (('now_ms',), 2000),
+                            (('record',), 'revoked'), (('answer',), 'denied'),
                             (('tested', 'model'), 'mock/text'), (('tested', 'notes'), 'alpha\n'),
                             (('tested', 'secret'), 'unlisted'), (('changed',), 'none')]:
             directory, document = self.copy_fixture('expected-consent.json', 'read-file-change')
@@ -208,6 +224,8 @@ class ObservationAdmission(unittest.TestCase):
         self.assertEqual(sorted(g['changed'] for g in given if g['changed'] != 'none'),
                          sorted(contracts.WORLD_CHANGES))
         self.assertEqual(sum(g['operator_store'] == 'other' for g in given), 1)
+        self.assertEqual(sum(g['record'] == 'revoked' for g in given), 1)
+        self.assertEqual(sum(g['answer'] == 'denied' for g in given), 1)
         self.assertEqual(sum(g['now_ms'] > g['expires_ms'] for g in given), 1)
         self.assertEqual(sum(g == dict(given[0], changed='none', tested=contracts.GRANTED_WORLD,
                                        operator_store='same', now_ms=1000) for g in given), 1)
@@ -220,6 +238,10 @@ class ObservationAdmission(unittest.TestCase):
                 with self.subTest(case=case.name):
                     self.assertEqual((same_permits, same_rest),
                                      (change['changed'] == 'workflow', change['changed'] == 'permits'))
+                    # A formatting-only edit parses to the same document: the workflow case
+                    # must change what a task means, the floor the world hash binds.
+                    self.assertEqual(granted['tasks'] != tested['tasks'],
+                                     change['changed'] == 'workflow')
 
     def test_refusal_cannot_send_and_success_cannot_retry(self):
         for fragment, field, value in [('resolved-null', 'requests', 1),

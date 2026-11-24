@@ -114,12 +114,12 @@ this capability and loses nothing by it: asking again is always conformant.
 These cases bind an engine that does grant records.
 
 `given` has `changed` (`none`, `workflow`, `permits`, `model`, `input`,
-`read-file`), `tested`, `operator_store` (`same`, `other`), `answer` (`none`),
-integer `now_ms`/`expires_ms`, never equal, and `effect_path`
-(`out/approved.txt`). `expires_ms` is the record's expiry on the injected
-clock; the expiry instant itself is not pinned. All stores and locations name
-adapter-created fixture identities; they never resolve to the operator's
-actual directories.
+`read-file`), `tested`, `record` (`standing`, `revoked`), `operator_store`
+(`same`, `other`), `answer` (`none`, `denied`), integer `now_ms`/`expires_ms`,
+never equal, and `effect_path` (`out/approved.txt`). `expires_ms` is the
+record's expiry on the injected clock; the expiry instant itself is not
+pinned. All stores and locations name adapter-created fixture identities; they
+never resolve to the operator's actual directories.
 
 `tested` is the world of the tested leg and has exactly `workflow`
 (`input.nika`, `changed.nika`), `model` (`mock/echo`, `mock/text`), `subject`
@@ -131,43 +131,62 @@ project. The granted world is `input.nika`, `mock/echo`, `alpha`, `alpha\n`.
 the member `changed` names. A `workflow` or `permits` case carries
 `changed.nika` beside its input: the same workflow with one edit, outside
 `permits:` for `workflow` and inside it for `permits`. In any other case that
-file is an orphan and the contract is invalid. The `model` case leaves the
-workflow bytes alone: the adapter makes the tested leg resolve the other model
-through the implementation's own run-level override.
+file is an orphan and the contract is invalid. The `workflow` edit changes
+what a task means (the prompt of `draft`), never only the formatting, and it
+leaves the gate's message and the gated write alone: the case pins the floor
+of the world hash, the semantic hash, and an engine that also binds the source
+bytes passes it too. No case pins a formatting-only edit, because such an
+engine may ask again there. The `model` case leaves the workflow bytes alone:
+the adapter makes the tested leg resolve the other model through the
+implementation's own run-level override.
 
 The seed leg runs the granted world in a fresh project and a fresh operator
 store, injects an affirmative answer at the gate, and then grants the record
 through the implementation's grant surface, as the separate act the law
 requires. It retains the record, both hashes and the first gated effect. The
-tested leg is a new run of the tested world, at `now_ms`, with no answer
-supplied. `other` gives that leg the project, with its copy of the record, and
-a fresh operator store: a project copy without the operator's own copy. A case
-varies one premise: a changed member, the other store or a clock past the
-expiry, never two.
+tested leg is a new run of the tested world, at `now_ms`. `other` gives that
+leg the project, with its copy of the record, and a fresh operator store: a
+project copy without the operator's own copy. `revoked` has the seed leg
+revoke the record through the implementation's revocation surface before the
+tested leg starts. A case varies one premise: a changed member, a revoked
+record, the other store or a clock past the expiry, never two.
+
+`answer: none` supplies nothing at the gate. `answer: denied` supplies an
+explicit refusal for that gate, as the denial control of an approval session
+does, and is admitted only where no premise is varied: the record applies and
+the refusal must still decide.
 
 `observations` has `reuse` (`applied`, `not-applied`), boolean `re_prompted`,
 and integer `new_decisions`/`reuse_attested`/`gated_effects`. Counts refer
 only to the tested leg, excluding the seed. `re_prompted` is true when the
-gate asks: with no answer supplied, the run pauses there. `new_decisions`
-counts the decisions the tested leg records from any source other than the
-record. `reuse_attested` counts the reuse attestations in its trace
-(`consent_reused`). Count effects at the dispatch boundary as for an approval
-session.
+gate asks: with no answer supplied, the run pauses there. A leg whose answer
+is supplied does not pause. `new_decisions` counts the decisions the tested
+leg records from any source other than the record; an `approval_decided`
+whose source is `standing` is not one. `reuse_attested` counts the reuse
+attestations in its trace (`consent_reused`). Count effects at the dispatch
+boundary as for an approval session.
 
-With nothing changed, the same store and an unexpired record, the leg applies
-the record: it does not re-prompt, records zero new decisions, attests exactly
-one reuse and issues exactly one gated effect. Every other case does not apply
-it: the gate re-prompts, and the leg records zero new decisions, zero reuse
-attestations and zero gated effects. An unchanged final file cannot prove
-that, and a run that fails before its gate proves nothing either: the adapter
-must observe the pause at the gate.
+With nothing changed, a standing record, the same store, an unexpired record
+and no answer, the leg applies the record: it does not re-prompt, records zero
+new decisions, attests exactly one reuse and issues exactly one gated effect.
+With one premise varied the leg does not apply it: the gate re-prompts, and
+the leg records zero new decisions, zero reuse attestations and zero gated
+effects. An unchanged final file cannot prove that, and a run that fails
+before its gate proves nothing either: the adapter must observe the pause at
+the gate.
 
-These eight cases pin the applicability of a record. They do not observe an
-explicit refusal winning over a record, revocation, the refusals at grant time
-(no `permits:` block, a grant by default, by policy or by an agent), the
-content of the not-covered list, the expiry that cannot be removed, the cost
-ceiling, the count against the approval limit, or a changed child workflow,
-skill or MCP pin. Those clauses stay unqualified until their own cases exist.
+With an explicit refusal the record applies and does not decide: the leg does
+not pause, records exactly one new decision, the refusal, attests zero reuse
+and issues zero gated effects. The reuse attestation count is what tells this
+case from an engine that let the record answer first.
+
+These ten cases pin when a record applies and that a refusal outranks it. They
+do not observe the refusals at grant time (no `permits:` block, a grant by
+default, by policy or by an agent), the content of the not-covered list, the
+expiry that cannot be removed, the cost ceiling, the count against the
+approval limit, a record presented at another step, a restored project copy
+after a revocation, or a changed child workflow, skill or MCP pin. Those
+clauses stay unqualified until their own cases exist.
 
 ## HTTP transport
 

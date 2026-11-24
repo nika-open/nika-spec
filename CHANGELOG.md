@@ -45,15 +45,17 @@ engine at its next `SPEC_PIN` bump.
   record the law is unchanged, and no diagnostic code is added.
 - The reference engine does not implement standing consent. The law is
   specified ahead of it.
-- Corpus: eight declared cases, `runtime/approval/008` to `015`, under a
+- Corpus: ten declared cases, `runtime/approval/008` to `017`, under a
   fifth observation door (`expected-consent.json` · `standing-consent-v1`):
-  reuse on an unchanged world, and a re-prompt with no gated effect after
-  a change of the workflow, of `permits:`, of the resolved model, of an
-  input or of a read file, on an expired record, and on a project copy
-  without the operator's copy. They are `DECLARED-UNQUALIFIED`: the runner
-  validates each contract and reports `UNSUPPORTED` before any engine
-  command, as it does for approval sessions, and no case counts as an
-  agreement until a command adapter observes it.
+  reuse on an unchanged world; a re-prompt with no gated effect after a
+  change of the workflow's meaning, of `permits:`, of the resolved model,
+  of an input or of a read file, on an expired record, on a project copy
+  without the operator's copy and on a revoked record; and an explicit
+  refusal that decides over a record that applies. They are
+  `DECLARED-UNQUALIFIED`: the runner validates each contract and reports
+  `UNSUPPORTED` before any engine command, as it does for approval
+  sessions, and no case counts as an agreement until a command adapter
+  observes it.
 
 ### Added · a first pack of recipe jobs (2026-11-24)
 

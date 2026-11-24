@@ -10,6 +10,7 @@
       "subject": "alpha",
       "notes": "beta\n"
     },
+    "record": "standing",
     "operator_store": "same",
     "answer": "none",
     "now_ms": 1000,

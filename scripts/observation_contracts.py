@@ -122,8 +122,8 @@ def approval(given, observed):
 
 
 def consent(given, observed):
-    fields(given, {"changed", "tested", "operator_store", "answer", "now_ms", "expires_ms",
-                   "effect_path"})
+    fields(given, {"changed", "tested", "record", "operator_store", "answer", "now_ms",
+                   "expires_ms", "effect_path"})
     choice(given["changed"], {"none", *WORLD_CHANGES})
     fields(given["tested"], set(GRANTED_WORLD))
     for value in given["tested"].values():
@@ -133,23 +133,29 @@ def consent(given, observed):
         member, value = WORLD_CHANGES[given["changed"]]
         world[member] = value
     require(given["tested"] == world, "the tested world differs only in the named member")
+    choice(given["record"], {"standing", "revoked"})
     choice(given["operator_store"], {"same", "other"})
-    require(given["answer"] == "none", "a standing case supplies no answer")
+    choice(given["answer"], {"none", "denied"})
     integer(given["now_ms"]); integer(given["expires_ms"])
     require(given["now_ms"] != given["expires_ms"], "the expiry instant itself is not pinned")
     require(given["effect_path"] == "out/approved.txt", "unknown effect target")
-    premises = [given["changed"] != "none", given["operator_store"] == "other",
-                given["now_ms"] > given["expires_ms"]]
+    premises = [given["changed"] != "none", given["record"] == "revoked",
+                given["operator_store"] == "other", given["now_ms"] > given["expires_ms"]]
     require(sum(premises) <= 1, "one case varies one premise of the record")
     fields(observed, {"reuse", "re_prompted", "new_decisions", "reuse_attested", "gated_effects"})
     choice(observed["reuse"], {"applied", "not-applied"})
     boolean(observed["re_prompted"])
     integer(observed["new_decisions"]); integer(observed["reuse_attested"])
     integer(observed["gated_effects"])
-    if any(premises):
+    if given["answer"] == "denied":
+        require(not any(premises), "a refusal case refuses over a record that applies")
+        require(observed == {"reuse": "not-applied", "re_prompted": False, "new_decisions": 1,
+                             "reuse_attested": 0, "gated_effects": 0},
+                "an explicit refusal decides: the record does not, and nothing is gated through")
+    elif any(premises):
         require(observed == {"reuse": "not-applied", "re_prompted": True, "new_decisions": 0,
                              "reuse_attested": 0, "gated_effects": 0},
-                "a changed world, an expired record or a missing operator copy re-prompts")
+                "a changed world or a revoked, expired or half-copied record re-prompts")
     else:
         require(observed == {"reuse": "applied", "re_prompted": False, "new_decisions": 0,
                              "reuse_attested": 1, "gated_effects": 1},

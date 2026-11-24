@@ -136,7 +136,7 @@ authority	NIKA-AUTH-006	check-reject	conformance/tests/core/authority/030-skill-
 authority	(positive)	positive-check	conformance/tests/core/authority/011-declassify-declared-opens-the-door
 authority	(positive)	positive-check	conformance/tests/core/authority/021-inert-door-declared-passes
 authority	(approval-lineage)	approval-replay	DECLARED-UNQUALIFIED (conformance/tests/runtime/approval; approval-session-v1; same run and decision, isolated store/project/lineage variants)
-authority	(standing-consent)	consent-reuse	DECLARED-UNQUALIFIED (conformance/tests/runtime/approval/008-standing-unchanged-world-reuses and 009 to 015; standing-consent-v1; applicability of a record only, its grant, refusal, revocation, expiry-removal and ceiling clauses remain unqualified)
+authority	(standing-consent)	consent-reuse	DECLARED-UNQUALIFIED (conformance/tests/runtime/approval/008-standing-unchanged-world-reuses and 009 to 017; standing-consent-v1; when a record applies and a refusal over it, its grant, step, expiry-removal and ceiling clauses remain unqualified)
 envelope	NIKA-PARSE-026	check-reject	conformance/tests/core/envelope/026-run-ambient-virtual-refused
 envelope	NIKA-PARSE-027	check-reject	conformance/tests/core/envelope/027-run-none-system-refused
 envelope	NIKA-PARSE-027	check-reject	conformance/tests/core/envelope/031-run-seeded-system-refused
