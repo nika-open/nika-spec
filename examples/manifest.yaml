@@ -4,7 +4,7 @@
 # Consumers · the reference engine embeds this pack (nika try ·
 # nika spec) · docs + website render projections of the same files.
 pack_version: 0.2.0-draft
-workflow_count: 63
+workflow_count: 80
 foundation:
   - file: examples/01-hello.nika
     sha256_16: 0b35ae8b802835d2
@@ -112,6 +112,14 @@ showcase:
     name: ceo-monday-brief
     constructs: [extract, local_model, on_error, outputs, secrets, typed_inputs, when, with]
     sha256_16: c848ab426a0a1050
+  - file: examples/ci-failure-triage.nika
+    name: ci-failure-triage
+    constructs: [fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, secrets, typed_inputs, when, with]
+    sha256_16: 977e959ff58b4792
+  - file: examples/comfyui-image-chain.nika
+    name: comfyui-image-chain
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, timeout, typed_inputs, when, with]
+    sha256_16: 72eb6d8e95d077d2
   - file: examples/competitor-radar.nika
     name: competitor-radar
     constructs: [fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, timeout, typed_inputs, when, with]
@@ -136,10 +144,18 @@ showcase:
     name: deep-research-brief
     constructs: [agent_tools, local_model, outputs, schema, typed_inputs, with]
     sha256_16: 12a41987ec2a39b4
+  - file: examples/docs-answer-desk.nika
+    name: docs-answer-desk
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, schema, typed_inputs, when, with]
+    sha256_16: 96c82068737e1c68
   - file: examples/etl-quarantine.nika
     name: etl-quarantine
     constructs: [on_error, outputs, when, with]
     sha256_16: 384dd28a45c9d9f5
+  - file: examples/feed-digest.nika
+    name: feed-digest
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, timeout, typed_inputs, when, with]
+    sha256_16: 6f42aaf2105a05c5
   - file: examples/image-compose-sheet.nika
     name: image-compose-sheet
     constructs: [outputs]
@@ -148,6 +164,10 @@ showcase:
     name: image-fx-batch
     constructs: [for_each, max_parallel, outputs, with]
     sha256_16: 26b9cd07185a5278
+  - file: examples/inbox-triage.nika
+    name: inbox-triage
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, secrets, typed_inputs, when, with]
+    sha256_16: f05b53849a510c11
   - file: examples/incident-war-room.nika
     name: incident-war-room
     constructs: [local_model, on_error, outputs, retry, schema, secrets, typed_inputs, when, with]
@@ -156,6 +176,18 @@ showcase:
     name: invoice-chaser
     constructs: [local_model, outputs, when, with]
     sha256_16: 346382218b89663a
+  - file: examples/launch-campaign-forge.nika
+    name: launch-campaign-forge
+    constructs: [fail_fast, for_each, max_parallel, on_error, outputs, retry, schema, secrets, timeout, typed_inputs, when, with]
+    sha256_16: e857919737301f8d
+  - file: examples/lead-enrichment.nika
+    name: lead-enrichment
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, secrets, typed_inputs, when, with]
+    sha256_16: fb2be02ea7cc7eaf
+  - file: examples/listing-link-audit.nika
+    name: listing-link-audit
+    constructs: [fail_fast, for_each, max_parallel, on_error, outputs, retry, timeout, typed_inputs, when, with]
+    sha256_16: fa5497281c108816
   - file: examples/localization-factory.nika
     name: localization-factory
     constructs: [fail_fast, for_each, local_model, max_parallel, on_error, outputs, with]
@@ -180,6 +212,26 @@ showcase:
     name: price-watch
     constructs: [extract, on_error, outputs, secrets, when, with]
     sha256_16: 558f6a3a8dde662d
+  - file: examples/programmatic-seo-pages.nika
+    name: programmatic-seo-pages
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, typed_inputs, when, with]
+    sha256_16: 3f083924ce074b7d
+  - file: examples/qr-art-forge.nika
+    name: qr-art-forge
+    constructs: [fail_fast, for_each, max_parallel, on_error, outputs, typed_inputs, when, with]
+    sha256_16: 693e9c5f13452b9c
+  - file: examples/quote-compare-decide.nika
+    name: quote-compare-decide
+    constructs: [fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, timeout, typed_inputs, when, with]
+    sha256_16: 308e81634c1313db
+  - file: examples/receipt-ledger.nika
+    name: receipt-ledger
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, secrets, typed_inputs, when, with]
+    sha256_16: abc604b6672cfd5e
+  - file: examples/refund-chaser.nika
+    name: refund-chaser
+    constructs: [fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, timeout, typed_inputs, when, with]
+    sha256_16: 0dbbfa160a59b15e
   - file: examples/release-notes.nika
     name: release-notes
     constructs: [local_model, on_error, outputs, schema, secrets, typed_inputs, when, with]
@@ -204,14 +256,26 @@ showcase:
     name: seo-content-brief
     constructs: [extract, local_model, on_error, outputs, schema, typed_inputs, with]
     sha256_16: 9076b0b3b1202bd4
+  - file: examples/seo-site-audit.nika
+    name: seo-site-audit
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, timeout, typed_inputs, when, with]
+    sha256_16: 2f4600c09323389a
   - file: examples/social-repurpose.nika
     name: social-repurpose
     constructs: [local_model, outputs, with]
     sha256_16: 8519e2f8d7f6fe52
+  - file: examples/source-to-45-locales.nika
+    name: source-to-45-locales
+    constructs: [extract, fail_fast, for_each, local_model, max_parallel, on_error, outputs, retry, schema, typed_inputs, when, with]
+    sha256_16: ba56e0efc2201026
   - file: examples/standup-digest.nika
     name: standup-digest
     constructs: [local_model, on_error, outputs, with]
     sha256_16: 80a8a71d2d893efa
+  - file: examples/subscription-renewal-radar.nika
+    name: subscription-renewal-radar
+    constructs: [for_each, local_model, max_parallel, on_error, outputs, retry, schema, secrets, timeout, typed_inputs, when, with]
+    sha256_16: 17be06003f59cc1b
   - file: examples/support-triage.nika
     name: support-triage
     constructs: [local_model, outputs, schema, secrets, when, with]
@@ -220,6 +284,10 @@ showcase:
     name: transcript-shownotes
     constructs: [local_model, outputs, schema, with]
     sha256_16: 690f91c3f06d114d
+  - file: examples/workflow-watchdog.nika
+    name: workflow-watchdog
+    constructs: [for_each, local_model, max_parallel, on_error, outputs, schema, secrets, typed_inputs, when, with]
+    sha256_16: 9bf761953eb80650
 snippets:
   - file: examples/snippets/delegate.nika
     sha256_16: 9c24f8e7c8fc88db

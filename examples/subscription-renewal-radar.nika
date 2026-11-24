@@ -1,0 +1,843 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T3 radar · admin / finance
+#
+# The monthly subscription review, on any morning · the registry, the last
+# invoices and the sign-in log are joined per tool; every renewal lands in a
+# 7 / 30 / 90-day window; a decision bundle sorts each tool into keep,
+# downgrade, cancel, negotiate or review; spend becomes a chart, deadlines
+# become a calendar you can import, and a state file remembers this run so
+# the next one reports only what moved. Nothing here is irreversible, so
+# nothing stops to ask you.
+#
+# Demonstrates ·
+#   - `nika:decide` as a lane table · one bundle, three thresholds tried in
+#     priority order (cancel → downgrade → negotiate), « keep » when none is
+#     crossed, « review » when missing evidence leaves a threshold
+#     undecidable (spec 11 · Unknown is an interval, never a zero)
+#   - `nika:date` · `subtract` for the usage window, `diff` fanned with
+#     `for_each` for the days to each renewal · all of it from `inputs.as_of`,
+#     so a run is reproducible and `--var as_of=…` replays another day
+#   - money and seats in `nika:jq` · integer cents, basis points, a pinned
+#     USD→EUR rate · the model never does arithmetic here
+#   - the state file with BOTH RFCs · `nika:json_diff` (6902) names what
+#     changed, `nika:json_merge_patch` (7396) writes the next state: a field
+#     a person added survives, a tool that left the registry is deleted
+#   - `nika:validate` `format: yaml` on the hand-edited registry · a broken
+#     registry is reported and nothing downstream runs on it
+#   - a text artifact built as data · an RFC 5545 `.ics` assembled in jq
+#     (CRLF lines, escaped text, an alarm at each notice deadline)
+#   - ONE bounded `infer:` fan, for the negotiation notes only · `schema:`
+#     typed, `for_each.max_items` capped, re-validated before it lands
+#   - `nika:inspect` `view: cost` folded into the run report, then one
+#     `nika:notify` ping with `on_error: recover`, sent only when something
+#     moved or the registry was rejected
+#
+# Run · nika run examples/subscription-renewal-radar.nika --model mock/echo
+#   Everything it reads ships in examples/fixtures/subscription-renewal-radar/.
+#   The ping goes to hooks.example.net, and the engine refuses to dial a
+#   documentation host (measured · NIKA-BUILTIN-NOTIFY-002 « documentation
+#   host … is not dialed (RFC 2606/6761) »), so it recovers and the run stays
+#   green with nothing sent. Run it twice · the second run finds nothing
+#   changed and sends nothing. Replay another day · add
+#   `--var as_of=2026-12-20`. Forget the last run ·
+#   `rm -rf out/subscription-renewal-radar`.
+
+nika: subscription-renewal-radar
+
+# The house seat · a THINKING model: the think block and the JSON both count
+# against `max_tokens`, so the note ceiling below covers both.
+model: ollama/qwen3.5:4b   # local · zero key · swap for mistral/mistral-small-latest (short notes are a small-model job)
+
+run:
+  clock: system            # the note fan declares a `timeout:` · name the clock it rides
+
+inputs:
+  as_of:
+    type: string
+    default: "2026-11-24"
+    description: "The day the radar stands on (YYYY-MM-DD) · fixed by default so two runs compare like with like"
+  usage_window_days:
+    type: integer
+    default: 30
+    description: "A seat counts as used when its user signed in within this many days"
+  horizon_days:
+    type: integer
+    default: 90
+    description: "Renewals further out than this stay off the calendar"
+
+const:
+  # Point these at your own files and move the `permits.fs.read` literals in
+  # the same edit · a permit cannot interpolate a const (NIKA-AUTH-007).
+  registry_path: "examples/fixtures/subscription-renewal-radar/subscriptions.yaml"
+  invoices_path: "examples/fixtures/subscription-renewal-radar/invoices.csv"
+  usage_path: "examples/fixtures/subscription-renewal-radar/usage-log.csv"
+  state_path: "out/subscription-renewal-radar/state.json"
+
+  # The books are kept in EUR. A pinned rate in basis points (1 USD = 0.92
+  # EUR), not a live quote: the same registry gives the same totals every
+  # run. Update it when finance closes the month.
+  eur_per_unit_bp: { EUR: 10000, USD: 9200 }
+
+  # Window edges in days, inclusive.
+  windows: { d7: 7, d30: 30, d90: 90 }
+
+  # Which bundle dimension names which lane. Keep it in step with the
+  # thresholds below: the lane is the dimension whose threshold the receipt
+  # crossed.
+  lane_of:
+    cancel_pressure: cancel
+    downgrade_pressure: downgrade
+    negotiate_pressure: negotiate
+
+  # The registry contract. The registry is edited by hand, so it is checked
+  # before anything trusts it. `amount` is a two-decimal STRING on purpose.
+  registry_schema:
+    type: object
+    required: [subscriptions]
+    properties:
+      subscriptions:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, vendor, plan, category, status, cycle, amount, currency, seats, renewal_date, notice_days, owner, usage_signal]
+          properties:
+            id: { type: string, pattern: "^[a-z0-9][a-z0-9-]{1,40}$" }
+            vendor: { type: string, minLength: 1, maxLength: 60 }
+            plan: { type: string, minLength: 1, maxLength: 40 }
+            category: { type: string, enum: [operations, go-to-market, engineering, design] }
+            status: { type: string, enum: [active, trial] }
+            cycle: { type: string, enum: [monthly, annual] }
+            amount: { type: string, pattern: "^[0-9]+\\.[0-9]{2}$" }
+            currency: { type: string, enum: [EUR, USD] }
+            seats: { type: integer, minimum: 1 }
+            renewal_date: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            notice_days: { type: integer, minimum: 0, maximum: 365 }
+            owner: { type: string, minLength: 1, maxLength: 40 }
+            usage_signal: { type: string, enum: [sso, none] }
+
+  # What a model-written note must satisfy before it is written to disk ·
+  # stricter than the shape the model is asked for: bounded lengths, and no
+  # link or e-mail address in any field (a note is read and acted on, so it
+  # must not be a vehicle for somewhere to click or write to).
+  note_policy:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [ask, leverage, fallback]
+      properties:
+        ask: { type: string, minLength: 1, maxLength: 240, not: { pattern: "https?://|www\\.|@" } }
+        leverage: { type: string, minLength: 1, maxLength: 400, not: { pattern: "https?://|www\\.|@" } }
+        fallback: { type: string, minLength: 1, maxLength: 240, not: { pattern: "https?://|www\\.|@" } }
+
+  # The decision rules, as a portable Decision Bundle (spec 11). Integer
+  # basis points everywhere. Thresholds are tried in order and the first one
+  # a dimension clears decides; a threshold an interval straddles stops the
+  # walk at « defer », which this file reads as « review ».
+  bundle:
+    decision_bundle_format: 1
+    manifest:
+      id: subscription-lanes
+      version: "1.0.0"
+      owner: quarry-lane-admin
+      license: Apache-2.0
+      valid_until: "2027-12-31T00:00:00Z"
+    evidence_schema:
+      active_users: { type: integer, required: false, sources: [usage-log], integrity: observed }
+      seat_utilization_bp: { type: integer, required: false, sources: [usage-log], integrity: observed }
+      price_change_bp: { type: integer, required: false, sources: [invoices], integrity: observed }
+      annual_eur: { type: integer, required: true, sources: [registry], integrity: observed }
+    transforms:
+      no_users: { kind: bucket, min: 0, max: 1000, edges: [1], values: [10000, 0] }
+      unused_share: { kind: linear, min: 0, max: 10000, scale_bp: -10000, offset: 10000 }
+      rise_step: { kind: bucket, min: -10000, max: 10000, edges: [500, 1000], values: [0, 3000, 6000] }
+      spend_step: { kind: bucket, min: 0, max: 1000000, edges: [1000, 5000], values: [0, 2000, 4000] }
+    rules:
+      dimensions:
+        cancel_pressure:        # nobody signed in during the window
+          terms:
+            - { evidence: active_users, transform: no_users, weight_bp: 10000, monotonicity: decreases }
+        downgrade_pressure:     # the share of paid seats nobody used
+          terms:
+            - { evidence: seat_utilization_bp, transform: unused_share, weight_bp: 10000, monotonicity: decreases }
+        negotiate_pressure:     # a price rise, weighted by what the tool costs a year
+          terms:
+            - { evidence: price_change_bp, transform: rise_step, weight_bp: 10000, monotonicity: increases }
+            - { evidence: annual_eur, transform: spend_step, weight_bp: 10000, monotonicity: increases }
+      thresholds:
+        - { dimension: cancel_pressure, recommend_gte_bp: 10000 }    # zero active users
+        - { dimension: downgrade_pressure, recommend_gte_bp: 4000 }  # 40 % of seats idle
+        - { dimension: negotiate_pressure, recommend_gte_bp: 7000 }  # ≥ 10 % rise on ≥ €1,000 a year, or 5–10 % on ≥ €5,000
+    governance:
+      never_automatic: []      # the radar recommends; nothing here acts on it
+      override: { append_only: true, reason_required: true }
+      appeal: "raise it at the monthly admin review"
+      human_required_triggers: [conflict_on_required]
+    fixtures:
+      - { name: idle-tool, class: positive, evidence: { active_users: 0, seat_utilization_bp: 0, price_change_bp: 0, annual_eur: 1200 } }
+      - { name: busy-tool, class: negative, evidence: { active_users: 5, seat_utilization_bp: 10000, price_change_bp: 0, annual_eur: 1200 } }
+      - { name: price-rise, class: ambiguous, evidence: { active_users: 5, seat_utilization_bp: 10000, price_change_bp: 1200, annual_eur: 1200 } }
+      - { name: two-sources, class: contradictory, evidence: { active_users: 2, seat_utilization_bp: 4000, annual_eur: 1200 } }
+      - { name: no-telemetry, class: adversarial, evidence: { price_change_bp: 0, annual_eur: 1200 } }
+
+secrets:
+  # Where the summary ping goes. A chat webhook carries its credential in its
+  # URL, so it is a secret, never an input. This rehearsal reads a committed
+  # placeholder file; point `path:` at a file outside the repo, or switch to
+  # `source: env` + `key:`, and change the host in `permits.net.http` with it.
+  # Measured: the engine reads a `file` secret without a `permits.fs.read`
+  # grant. `host_from_self` is the sanction because the secret IS the URL:
+  # `host:` only sanctions a literal destination, and on this target it is
+  # refused NIKA-SEC-006 even though `check` prints it as the « exact form ».
+  admin_webhook:
+    source: file
+    path: "examples/fixtures/subscription-renewal-radar/admin-webhook.url"
+    egress:
+      - to: "nika:notify"
+        host_from_self: true
+
+permits:
+  tools: ["nika:chart", "nika:convert", "nika:date", "nika:decide", "nika:hash", "nika:inspect", "nika:jq", "nika:json_diff", "nika:json_merge_patch", "nika:notify", "nika:read", "nika:validate", "nika:write"]
+  net:
+    # `host_from_self:` above sanctions the FLOW (the secret may be the URL) —
+    # it does not grant the capability. The host stays unknown at check, so it
+    # is judged at RUN against this bound: name the webhook host here or the
+    # send is refused mid-run, after the work is already done.
+    http: ["hooks.example.net"]
+  fs:
+    # The three sources and last run's state, each spelled out. The state
+    # file sits on both sides: read last run, write the next.
+    read:
+      - "examples/fixtures/subscription-renewal-radar/subscriptions.yaml"
+      - "examples/fixtures/subscription-renewal-radar/invoices.csv"
+      - "examples/fixtures/subscription-renewal-radar/usage-log.csv"
+      - "out/subscription-renewal-radar/state.json"
+    # Four named artifacts and one note per vendor to negotiate with. `*`
+    # never crosses `/`, so a registry id can never steer a note out of
+    # negotiation/ (the schema also pins ids to `[a-z0-9-]`).
+    write:
+      - "out/subscription-renewal-radar/state.json"
+      - "out/subscription-renewal-radar/spend-by-category.svg"
+      - "out/subscription-renewal-radar/renewals.ics"
+      - "out/subscription-renewal-radar/run-report.json"
+      - "out/subscription-renewal-radar/negotiation/*.md"
+
+tasks:
+  # ── gather ──────────────────────────────────────────────────────────
+  registry_raw:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.registry_path }}" }
+
+  invoices_raw:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.invoices_path }}" }
+
+  usage_raw:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.usage_path }}" }
+
+  # Last run's memory. The first run has none: only not-found is forgiven, a
+  # permission error on the same path still fails loudly.
+  previous:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.state_path }}" }
+    on_error:
+      on_codes: [NIKA-BUILTIN-READ-001]
+      recover: "{}"
+
+  # One blake3 over the three source texts, taken before any parse. It is the
+  # digest every evidence item carries, and the state keeps it, so a reader
+  # can tell « the sources changed » from « the day changed ». `nika:hash`
+  # takes the object as compact JSON.
+  fingerprint:
+    with:
+      registry: ${{ tasks.registry_raw.output }}
+      invoices: ${{ tasks.invoices_raw.output }}
+      usage: ${{ tasks.usage_raw.output }}
+    invoke:
+      tool: "nika:hash"
+      args:
+        algo: blake3
+        content: { registry: "${{ with.registry }}", invoices: "${{ with.invoices }}", usage: "${{ with.usage }}" }
+
+  # ── normalize ───────────────────────────────────────────────────────
+  # The registry is hand-edited YAML. `format: yaml` parses the string and
+  # validates it in one call; an invalid registry is a REPORT, not a crash,
+  # and the `when:` below keeps every later step off it.
+  registry_check:
+    with:
+      raw: ${{ tasks.registry_raw.output }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.raw }}"
+        format: yaml
+        schema: "${{ const.registry_schema }}"
+
+  registry:
+    with:
+      raw: ${{ tasks.registry_raw.output }}
+      valid: ${{ tasks.registry_check.output.valid }}
+    when: ${{ with.valid == true }}
+    invoke:
+      tool: "nika:convert"
+      args: { input: "${{ with.raw }}", from: yaml, to: json }
+
+  # CSV cells arrive as strings · the jq below converts before any arithmetic.
+  invoices:
+    with:
+      csv: ${{ tasks.invoices_raw.output }}
+    invoke:
+      tool: "nika:convert"
+      args: { input: "${{ with.csv }}", from: csv, to: json, has_header: true }
+
+  usage:
+    with:
+      csv: ${{ tasks.usage_raw.output }}
+    invoke:
+      tool: "nika:convert"
+      args: { input: "${{ with.csv }}", from: csv, to: json, has_header: true }
+
+  # `nika:date` wants a full timestamp: a bare 2026-11-24 is refused
+  # (NIKA-BUILTIN-DATE-001 · « failed to find time component »), hence the
+  # `T00:00:00Z` on every date this file hands it.
+  usage_since:
+    invoke:
+      tool: "nika:date"
+      args:
+        op: subtract
+        base: "${{ inputs.as_of }}T00:00:00Z"
+        duration: "${{ inputs.usage_window_days }}d"
+
+  # The join · one row per subscription with its money, its last invoice and
+  # its seat use. Amounts become integer cents (`round` after `* 100`, so
+  # 49.90 is 4990, not 4989), the price change is in basis points against the
+  # LAST invoice by date, and a seat counts once however often its user
+  # signed in. A tool with `usage_signal: none` gets `null`, never `0`: no
+  # data is not the same as no users.
+  joined:
+    with:
+      registry: ${{ tasks.registry.output }}
+      invoices: ${{ tasks.invoices.output }}
+      usage: ${{ tasks.usage.output }}
+      since: ${{ tasks.usage_since.output }}
+    when: ${{ with.registry != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          registry: "${{ with.registry }}"
+          invoices: "${{ with.invoices }}"
+          usage: "${{ with.usage }}"
+          since: "${{ with.since }}"
+          as_of: "${{ inputs.as_of }}"
+          fx: "${{ const.eur_per_unit_bp }}"
+        expression: |
+          .fx as $fx | .as_of as $asof | (.since[:10]) as $since
+          | (.invoices | group_by(.vendor_id) | map(max_by(.issued_on)) | map({ (.vendor_id): . }) | add // {}) as $last
+          | (.usage
+             | map(select(.signed_in_on >= $since and .signed_in_on <= $asof))
+             | group_by(.tool) | map({ (.[0].tool): (map(.user) | unique | length) }) | add // {}) as $active
+          | .registry.subscriptions
+          | map(
+              . as $s
+              | ($s.amount | tonumber * 100 | round) as $cents
+              | (if $s.cycle == "annual" then 1 else 12 end) as $per_year
+              | ($cents * $fx[$s.currency] / 10000 * $per_year | floor) as $annual
+              | $last[$s.id] as $inv
+              | (if $inv == null then null else ($inv.amount | tonumber * 100 | round) end) as $inv_cents
+              | (if $inv == null or $inv.currency != $s.currency then null
+                 else (($cents - $inv_cents) * 10000 / $inv_cents | floor) end) as $rise
+              | (if $s.usage_signal == "none" then null else ($active[$s.id] // 0) end) as $users
+              | $s + {
+                  annual_eur_cents: $annual,
+                  annual_eur: ($annual / 100 | floor),
+                  renewal_ts: ($s.renewal_date + "T00:00:00Z"),
+                  last_invoice: (if $inv == null then null else { no: $inv.invoice_no, issued_on: $inv.issued_on, amount: $inv.amount } end),
+                  price_change_bp: $rise,
+                  active_users: $users,
+                  seat_utilization_bp: (if $users == null then null else ([($users * 10000 / $s.seats | floor), 10000] | min) end)
+                }
+            )
+
+  # ── judge ───────────────────────────────────────────────────────────
+  # Days from `as_of` to each renewal · one `nika:date diff` per row, back in
+  # item order (measured), which is what lets the next step zip by position.
+  days_left:
+    with:
+      rows: ${{ tasks.joined.output }}
+    when: ${{ with.rows != null }}
+    for_each:
+      items: ${{ with.rows }}
+      max_parallel: 8
+      max_items: 200
+    invoke:
+      tool: "nika:date"
+      args:
+        op: diff
+        start: "${{ inputs.as_of }}T00:00:00Z"
+        end: "${{ item.renewal_ts }}"
+        unit: days
+
+  # Windows, notice deadlines and trials, then one EvidenceSnapshot per row ·
+  # only the facts that exist go in. A tool with no sign-in data simply has
+  # no `active_users` item, and the kernel turns that absence into an
+  # interval instead of a guess.
+  snapshots:
+    with:
+      rows: ${{ tasks.joined.output }}
+      days: ${{ tasks.days_left.output }}
+      digest: ${{ tasks.fingerprint.output }}
+    when: ${{ with.rows != null && with.days != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          rows: "${{ with.rows }}"
+          days: "${{ with.days }}"
+          digest: "${{ with.digest }}"
+          t: "${{ inputs.as_of }}T00:00:00Z"
+          w: "${{ const.windows }}"
+        expression: |
+          .t as $t | .digest as $dg | .w as $w
+          | def ev($k; $v; $src): { key: $k, value: $v, source: $src, observed_at: $t, digest: $dg,
+                                    confidentiality: "internal", integrity: "observed",
+                                    quality: { freshness: "fresh", completeness: "complete", independence_group: $src } };
+          [ .rows, .days ] | transpose
+          | map(.[0] + { days_left: .[1] })
+          | map(. + {
+              window: (if .days_left < 0 then "past" elif .days_left <= $w.d7 then "d7"
+                       elif .days_left <= $w.d30 then "d30" elif .days_left <= $w.d90 then "d90" else "later" end),
+              act_by_days: (.days_left - .notice_days),
+              notice_missed: (.days_left - .notice_days < 0),
+              trial_ending: (.status == "trial" and .days_left <= $w.d30)
+            })
+          | { rows: .,
+              snapshots: map({ t: $t, evidence: [
+                ev("annual_eur"; .annual_eur; "registry"),
+                (if .active_users != null then ev("active_users"; .active_users; "usage-log") else empty end),
+                (if .seat_utilization_bp != null then ev("seat_utilization_bp"; .seat_utilization_bp; "usage-log") else empty end),
+                (if .price_change_bp != null then ev("price_change_bp"; .price_change_bp; "invoices") else empty end)
+              ] }) }
+
+  # The law · one receipt per subscription, pure compute, same bytes every
+  # run. A bundle that breaks its own laws (a float weight, a monotonicity
+  # its fixtures contradict) is refused NIKA-DECIDE-001; a snapshot that
+  # misfits the evidence schema is refused NIKA-DECIDE-002. Both fail loudly.
+  decide:
+    with:
+      snaps: ${{ tasks.snapshots.output }}
+    when: ${{ with.snaps != null }}
+    for_each:
+      items: ${{ with.snaps.snapshots }}
+      max_parallel: 8
+      max_items: 200
+    invoke:
+      tool: "nika:decide"
+      args:
+        bundle: ${{ const.bundle }}
+        evidence: ${{ item }}
+
+  # Receipt → lane. `recommend` names the first threshold whose interval
+  # floor clears it (the kernel walked them in the same order); `defer` with
+  # every ceiling below its threshold is « keep »; any other `defer` (a
+  # straddle, measured on the tool with no sign-in data) is « review ».
+  # The same step builds the state view, the merge patch and the spend rows.
+  lanes:
+    with:
+      snaps: ${{ tasks.snapshots.output }}
+      receipts: ${{ tasks.decide.output }}
+      previous: ${{ tasks.previous.output }}
+      digest: ${{ tasks.fingerprint.output }}
+    when: ${{ with.snaps != null && with.receipts != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          rows: "${{ with.snaps.rows }}"
+          receipts: "${{ with.receipts }}"
+          previous: "${{ with.previous }}"
+          digest: "${{ with.digest }}"
+          as_of: "${{ inputs.as_of }}"
+          thresholds: "${{ const.bundle.rules.thresholds }}"
+          lane_of: "${{ const.lane_of }}"
+        expression: |
+          .thresholds as $th | .lane_of as $lo | .as_of as $asof | .digest as $dg
+          | (.previous | if type == "string" then fromjson else . end) as $prev_full
+          | ($prev_full.subscriptions // {}) as $prev
+          | ([ .rows, .receipts ] | transpose
+             | map(
+                 .[0] as $r | .[1] as $rc | $rc.dimensions as $d
+                 | (if $rc.outcome == "recommend" then
+                      first($th[] | select($d[.dimension].interval.lo >= .recommend_gte_bp) | $lo[.dimension])
+                    elif $rc.outcome == "defer" and ([ $th[] | select($d[.dimension].interval.hi >= .recommend_gte_bp) ] | length) == 0 then "keep"
+                    else "review" end) as $lane
+                 | $r + { lane: $lane, outcome: $rc.outcome, why: ($rc.determination_provenance[0] // "") }
+               )) as $rows
+          | ($rows | map({ (.id): { lane, window, renewal_date, annual_eur, price_change_bp, active_users } }) | add // {}) as $now
+          | ($prev | with_entries(.value |= { lane, window, renewal_date, annual_eur, price_change_bp, active_users })) as $was
+          | { rows: $rows,
+              negotiate: ($rows | map(select(.lane == "negotiate"))),
+              current: $now,
+              previous: $was,
+              previous_full: $prev_full,
+              patch: {
+                radar: "subscription-renewal-radar",
+                as_of: $asof,
+                sources_blake3: $dg,
+                subscriptions: ($now + ($prev | keys | map(select(. as $k | $now | has($k) | not)) | map({ (.): null }) | add // {}))
+              },
+              spend: ($rows | group_by(.category) | map({
+                category: .[0].category,
+                subscriptions: length,
+                annual_eur: ((map(.annual_eur_cents) | add) / 100),
+                monthly_eur: ((map(.annual_eur_cents) | add) / 12 | floor | . / 100)
+              })) }
+
+  # What moved since last run, as RFC 6902 operations over the radar's own
+  # fields only (a person's note on a tool is not a change).
+  changes:
+    with:
+      l: ${{ tasks.lanes.output }}
+    when: ${{ with.l != null }}
+    invoke:
+      tool: "nika:json_diff"
+      args:
+        before: "${{ with.l.previous }}"
+        after: "${{ with.l.current }}"
+
+  # The next state, RFC 7396 · objects merge, so a field someone added by
+  # hand (an `acknowledged_on`, say) is kept; a tool gone from the registry
+  # rides the patch as `null` and is deleted. Measured both ways. The same
+  # rule means an unknown fact (`price_change_bp: null`) is stored as an
+  # ABSENT key: a merge patch cannot write a null.
+  next_state:
+    with:
+      l: ${{ tasks.lanes.output }}
+    when: ${{ with.l != null }}
+    invoke:
+      tool: "nika:json_merge_patch"
+      args:
+        target: "${{ with.l.previous_full }}"
+        patch: "${{ with.l.patch }}"
+
+  # The calendar, as TEXT built from data · CRLF line ends and `\` `,` `;`
+  # escaped in text values (RFC 5545 §3.1 and §3.3.11). All-day events on the
+  # renewal date; the alarm fires at the notice deadline, or two days ahead
+  # when the plan needs no notice.
+  calendar:
+    with:
+      l: ${{ tasks.lanes.output }}
+    when: ${{ with.l != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { rows: "${{ with.l.rows }}", as_of: "${{ inputs.as_of }}", horizon: "${{ inputs.horizon_days }}" }
+        expression: |
+          def esc: gsub("(?<c>[\\\\,;])"; "\\\(.c)");
+          def day: gsub("-"; "");
+          .as_of as $asof | .horizon as $h
+          | [ .rows[] | select(.days_left >= 0 and .days_left <= $h) ] | sort_by(.renewal_date, .id)
+          | map(
+              "BEGIN:VEVENT",
+              "UID:\(.id)-\(.renewal_date | day)@renewal-radar.example.com",
+              "DTSTAMP:\($asof | day)T000000Z",
+              "DTSTART;VALUE=DATE:\(.renewal_date | day)",
+              "SUMMARY:\(if .status == "trial" then "Trial ends" else "Renews" end) · \(.vendor | esc) \(.plan | esc)",
+              "DESCRIPTION:\(.amount) \(.currency)\\, \(.cycle) plan · lane \(.lane) · owner \(.owner | esc)",
+              "BEGIN:VALARM",
+              "ACTION:DISPLAY",
+              "TRIGGER:-P\([.notice_days, 2] | max)D",
+              "DESCRIPTION:Last day to cancel or renegotiate \(.vendor | esc)",
+              "END:VALARM",
+              "END:VEVENT"
+            )
+          | ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//nika examples//subscription-renewal-radar//EN",
+             "CALSCALE:GREGORIAN", "METHOD:PUBLISH"] + . + ["END:VCALENDAR"]
+          | join("\r\n") + "\r\n"
+
+  # ── act ─────────────────────────────────────────────────────────────
+  # The only model step · a short note per vendor worth a call. The facts in
+  # the prompt are computed above; the model writes words, not numbers.
+  # `max_items: 6` makes the spend a ceiling check can see: six notes at
+  # most, each under `max_tokens`. A seventh candidate fails the fan before
+  # its first call (NIKA-VAR-006) instead of quietly costing more.
+  notes:
+    with:
+      l: ${{ tasks.lanes.output }}
+    when: ${{ with.l != null && size(with.l.negotiate) > 0 }}
+    for_each:
+      items: ${{ with.l.negotiate }}
+      max_parallel: 2
+      max_items: 6
+    timeout: "300s"              # a local model loads on its first call
+    retry:
+      max_attempts: 2
+      backoff_ms: 2000
+    on_error:
+      # The labelled stand-in · a dead model leaves a visible hole in the
+      # note, never a plausible paragraph.
+      recover: { ask: "(no note · the model call failed)", leverage: "(none)", fallback: "(none)" }
+    infer:
+      # a reasoning model needs 16384 here, or a documented run.reasoning.effort: low
+      max_tokens: 1500
+      system: |
+        You prepare short negotiation notes for a small company's admin.
+        Use only the facts given. Never invent a discount, a competitor price
+        or a contract clause. Plain words, no greeting.
+      prompt: |
+        Vendor · ${{ item.vendor }}, plan ${{ item.plan }}, billed ${{ item.cycle }}
+        Renewal · ${{ item.renewal_date }}, notice ${{ item.notice_days }} days, ${{ item.act_by_days }} days left to act
+        Price · ${{ item.amount }} ${{ item.currency }} now, ${{ item.last_invoice.amount }} on invoice ${{ item.last_invoice.no }} (${{ item.price_change_bp }} basis points higher)
+        Seats · ${{ item.active_users }} of ${{ item.seats }} used in the last ${{ inputs.usage_window_days }} days
+        Annual cost in EUR · ${{ item.annual_eur }}
+        Write the ask (one sentence), our leverage, and the fallback if they refuse.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [ask, leverage, fallback]
+        properties:
+          ask: { type: string, maxLength: 240 }
+          leverage: { type: string, maxLength: 400 }
+          fallback: { type: string, maxLength: 240 }
+
+  # The answers are re-checked against `const.note_policy` before any of it
+  # is written. A miss writes no note at all and is listed in the report.
+  notes_check:
+    with:
+      notes: ${{ tasks.notes.output }}
+    when: ${{ with.notes != null }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.notes }}"
+        schema: "${{ const.note_policy }}"
+
+  # One prep sheet per vendor · computed facts on top, the model's three
+  # fields below, each labelled for what it is. `with.notes[index]` pairs a
+  # note with its row: a fan's output keeps item order.
+  save_notes:
+    with:
+      l: ${{ tasks.lanes.output }}
+      notes: ${{ tasks.notes.output }}
+      vetted: ${{ tasks.notes_check.output }}
+    when: ${{ with.vetted != null && with.vetted.valid == true && with.l != null && with.notes != null }}
+    for_each:
+      items: ${{ with.l.negotiate }}
+      max_items: 6
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/subscription-renewal-radar/negotiation/${{ item.id }}.md"
+        create_dirs: true
+        content: |
+          # Negotiation prep · ${{ item.vendor }} ${{ item.plan }}
+
+          Computed by the radar on ${{ inputs.as_of }}:
+
+          - Renewal ${{ item.renewal_date }} · ${{ item.days_left }} days away · notice ${{ item.notice_days }} days · act within ${{ item.act_by_days }} days
+          - Price ${{ item.amount }} ${{ item.currency }}, ${{ item.cycle }} plan · last invoice ${{ item.last_invoice.no }} at ${{ item.last_invoice.amount }} · change ${{ item.price_change_bp }} bp
+          - Seats ${{ item.active_users }} of ${{ item.seats }} used · annual cost EUR ${{ item.annual_eur }}
+          - Rule that fired · ${{ item.why }}
+
+          Drafted by a model, schema-checked, not verified:
+
+          **Ask** · ${{ with.notes[index].ask }}
+
+          **Leverage** · ${{ with.notes[index].leverage }}
+
+          **Fallback** · ${{ with.notes[index].fallback }}
+
+  save_state:
+    with:
+      state: ${{ tasks.next_state.output }}
+    when: ${{ with.state != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "${{ const.state_path }}"
+        content: "${{ with.state }}"
+        create_dirs: true
+
+  # Annual spend per category in EUR. The chart's money semantic is `usd`
+  # and renders a « $ » (measured), so these euro amounts ride `count`, and
+  # the title carries the unit.
+  chart:
+    with:
+      l: ${{ tasks.lanes.output }}
+    when: ${{ with.l != null }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.l.spend }}"
+        semantics: { category: category, annual_eur: count }
+        chart:
+          type: bar
+          x: category
+          y: annual_eur
+          title: "Annualized SaaS spend by category (EUR)"
+        out: out/subscription-renewal-radar/spend-by-category.svg
+
+  save_calendar:
+    with:
+      ics: ${{ tasks.calendar.output }}
+    when: ${{ with.ics != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: out/subscription-renewal-radar/renewals.ics
+        content: "${{ with.ics }}"
+        create_dirs: true
+
+  # ── report ──────────────────────────────────────────────────────────
+  # The run's own spend, read once the only model step has settled. Under a
+  # local or mock seat it reads `total_usd: 0.0` with `metered: false`:
+  # unpriced, not free.
+  cost:
+    after:
+      notes: terminal
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  # Always written · `terminal` admits every settled state, so a failed
+  # artifact still gets its report, and the report says which one failed.
+  # Built as a value (CONVENTIONS §5) · counts per window and lane, the
+  # decisions with the rule that fired, what changed, the spend, the cost.
+  report:
+    after:
+      save_state: terminal
+      save_calendar: terminal
+      save_notes: terminal
+      chart: terminal
+    with:
+      check: ${{ tasks.registry_check.output }}
+      l: ${{ tasks.lanes.output }}
+      changes: ${{ tasks.changes.output }}
+      vetted: ${{ tasks.notes_check.output }}
+      cost: ${{ tasks.cost.output }}
+      digest: ${{ tasks.fingerprint.output }}
+      state_status: ${{ tasks.save_state.status }}
+      calendar_status: ${{ tasks.save_calendar.status }}
+      notes_status: ${{ tasks.save_notes.status }}
+      chart_status: ${{ tasks.chart.status }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          check: "${{ with.check }}"
+          l: "${{ with.l }}"
+          changes: "${{ with.changes }}"
+          vetted: "${{ with.vetted }}"
+          cost: "${{ with.cost }}"
+          digest: "${{ with.digest }}"
+          as_of: "${{ inputs.as_of }}"
+          artifacts:
+            state: "${{ with.state_status }}"
+            calendar: "${{ with.calendar_status }}"
+            negotiation_notes: "${{ with.notes_status }}"
+            chart: "${{ with.chart_status }}"
+        expression: |
+          (.l.rows // []) as $rows
+          | ((.changes // []) | group_by(.path | split("/")[1])
+             | map({ id: (.[0].path | split("/")[1]), ops: (map(.op) | unique) })) as $changed
+          | def count_by($f; $keys): reduce $keys[] as $k ({}; .[$k] = ([ $rows[] | select(.[$f] == $k) ] | length));
+          { radar: "subscription-renewal-radar",
+            as_of: .as_of,
+            sources_blake3: .digest,
+            registry: { valid: .check.valid, errors: .check.errors },
+            first_run: ((.l.previous // {}) == {}),
+            counts: {
+              subscriptions: ($rows | length),
+              by_window: count_by("window"; ["d7", "d30", "d90", "later", "past"]),
+              by_lane: count_by("lane"; ["keep", "downgrade", "cancel", "negotiate", "review"]),
+              trials_ending: ([ $rows[] | select(.trial_ending) ] | length),
+              notice_missed: ([ $rows[] | select(.notice_missed) ] | length),
+              changed: ($changed | length)
+            },
+            attention: {
+              renew_within_7_days: [ $rows[] | select(.window == "d7") | .id ],
+              trials_ending: [ $rows[] | select(.trial_ending) | .id ],
+              notice_missed: [ $rows[] | select(.notice_missed) | .id ]
+            },
+            decisions: ($rows | sort_by(.days_left) | map({ id, vendor, lane, outcome, window, days_left, act_by_days, renewal_date, why })),
+            changes: $changed,
+            spend_eur: {
+              annual_total: (($rows | map(.annual_eur_cents) | add // 0) / 100),
+              by_category: (.l.spend // [])
+            },
+            negotiation_notes: {
+              requested: ((.l.negotiate // []) | length),
+              schema_valid: .vetted.valid,
+              errors: (.vetted.errors // [])
+            },
+            artifacts: .artifacts,
+            cost: .cost }
+          | . + { ping: (
+              if .registry.valid != true then
+                { due: true, severity: "warning",
+                  message: "Subscription radar · \(.as_of) · the registry was rejected (\(.registry.errors | length) error(s)) · nothing was judged · see run-report.json" }
+              elif .counts.changed > 0 then
+                { due: true, severity: (if .counts.notice_missed > 0 then "warning" else "info" end),
+                  message: "Subscription radar · \(.as_of) · \(.counts.changed) changed since last run · renew within 7 days \(.counts.by_window.d7) · cancel \(.counts.by_lane.cancel) · downgrade \(.counts.by_lane.downgrade) · negotiate \(.counts.by_lane.negotiate) · review \(.counts.by_lane.review) · notice missed \(.counts.notice_missed)" }
+              else
+                { due: false, severity: "info", message: "nothing changed since the last run" }
+              end) }
+
+  save_report:
+    with:
+      report: ${{ tasks.report.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: out/subscription-renewal-radar/run-report.json
+        content: "${{ with.report }}"
+        create_dirs: true
+
+  # The ping comes LAST, after the report, on purpose. Measured: a task that
+  # reads `${{ secrets.X }}` taints its own output AND its `.status`, so a
+  # report that recorded whether the ping landed would carry the secret into
+  # a file (NIKA-SEC-006). The report decides whether a ping is due and
+  # writes its text; the journal records whether it landed. A quiet run
+  # sends nothing; a rejected registry always speaks.
+  ping:
+    after:
+      save_report: terminal
+    with:
+      report: ${{ tasks.report.output }}
+    when: ${{ with.report.ping.due == true }}
+    invoke:
+      tool: "nika:notify"
+      args:
+        channel: webhook
+        target: "${{ secrets.admin_webhook }}"
+        severity: "${{ with.report.ping.severity }}"
+        message: "${{ with.report.ping.message }}"
+        data: { changes: "${{ with.report.changes }}", attention: "${{ with.report.attention }}" }
+    on_error:
+      # Delivery failed: no network, a refusing receiver, or this rehearsal's
+      # documentation host (NIKA-BUILTIN-NOTIFY-002). The report is already
+      # on disk, so the radar's answer stands either way.
+      recover: "(ping not delivered · read out/subscription-renewal-radar/run-report.json)"
+
+outputs:
+  decisions:
+    value: ${{ tasks.report.output.decisions }}
+    description: "One row per subscription · its lane, window, days left and the rule that decided"
+  changes:
+    value: ${{ tasks.report.output.changes }}
+    description: "Subscriptions whose radar fields moved since the last run · every one on the first run"
+  attention:
+    value: ${{ tasks.report.output.attention }}
+    description: "Renewals within 7 days, trials ending and notice deadlines already missed"
+  spend_eur:
+    value: ${{ tasks.report.output.spend_eur }}
+    description: "Annualized spend in EUR, total and per category, at the pinned exchange rate"

@@ -1,0 +1,559 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · operations
+#
+# The silent-failure watchdog · your automations' run records are checked
+# against what each one is supposed to do, and someone is paged only when
+# something is actually wrong: a job that stopped succeeding, a run that
+# cost far more than it should, failures piling up. It remembers what it
+# already paged, so the same anomaly is not paged again within six hours,
+# and one still open four hours after its first page goes to an escalation
+# target instead, once. A healthy run costs no model call and sends nothing;
+# the reports and a cost chart are written either way.
+#
+# Demonstrates ·
+#   - phases · gather · normalize · judge · act · report
+#   - `nika:validate` on the run records before any verdict · a malformed
+#     file becomes an anomaly of its own, never a silent pass
+#   - the whole verdict in `nika:jq` · epoch math (`fromdateiso8601`), a
+#     per-workflow median, a trailing failure streak · no model touches a number
+#   - `nika:date` windows and `nika:hash` fingerprints · the dedupe and
+#     escalation decision is a table over (fingerprint, first page, last page)
+#   - two `nika:notify` branches with `on_error: recover:` · the page and the
+#     escalation, each with its own webhook secret
+#   - the state-file pattern with `nika:json_diff` · what this run opened,
+#     moved or closed, as RFC 6902 operations
+#   - `nika:chart` · cost per workflow over the last 24 h, byte-identical SVG
+#   - `nika:inspect` + `nika:emit` · the run's own cost in `run-report.json`,
+#     the counts as a journal event
+#
+# Why there is no gate (NIKA-SEC-009 · measured on 0.125.0) · the lethal
+#   trifecta needs three legs, and this boundary grants two: private reads
+#   (the run records, the alert state) and external egress (the webhooks).
+#   Untrusted ingress is a `nika:fetch`, an `mcp:` tool or an agent, and none
+#   is granted: the records are local files you trust. The check's TRIFECTA
+#   line is green with no human gate. Pull the records from an API with
+#   `nika:fetch` and the third leg appears; read `nika explain NIKA-SEC-009`
+#   before you do.
+#
+# Needs · ollama serving qwen3.5:4b for the summary (`--model mock/echo` needs
+#   nothing) · WATCHDOG_WEBHOOK_URL and ESCALATION_WEBHOOK_URL, but only when
+#   there is something to send. Unset (NIKA-VAR-001), or pointing at
+#   `hooks.example.com`, a documentation host the engine never dials
+#   (RFC 2606/6761), each send recovers and is recorded as not sent, so the
+#   next run tries again. Both measured.
+#
+# Run · nika run examples/workflow-watchdog.nika
+#   Mock rehearsal (zero key, deterministic) · add `--model mock/echo`. As of
+#   the default moment the sample shows four anomalies; against the committed
+#   alert-state seed, two are paged, one is escalated, one is suppressed (paged
+#   an hour ago), and one old alert is closed. The sends recover, exit 0.
+#   `rm -rf out/workflow-watchdog` resets the state to the seed.
+#   The evening before was healthy · add `--var as_of=2026-11-23T22:00:00Z`:
+#   zero anomalies, zero model calls, nothing sent, every report still lands.
+#   Live · pass the current time, `--var as_of="$(date -u +%Y-%m-%dT%H:%M:%SZ)"`,
+#   and point `const.runs_path` at your own records.
+
+nika: workflow-watchdog
+
+# The house seat is a THINKING model: the think block and the JSON both count
+# against `max_tokens` (engine#428), so the summary ceiling covers both.
+model: ollama/qwen3.5:4b   # local · zero key · swap for any catalog provider
+
+inputs:
+  as_of:
+    type: string
+    default: "2026-11-24T08:00:00Z"
+    description: "The moment the check runs as of (ISO 8601, UTC) · runs that started later are not known yet"
+
+const:
+  # Point these at your own records, and move `permits.fs.read` in the same
+  # edit: a permit is a literal, it cannot interpolate a const (NIKA-AUTH-007).
+  runs_path: "examples/fixtures/workflow-watchdog/runs.json"
+  expectations_path: "examples/fixtures/workflow-watchdog/expectations.json"
+  # The paging policy lives in the file, not in a prompt, so a reviewer can
+  # read it: a cost spike is a run in the last `lookback_hours` above its
+  # ceiling or above `spike_factor` times the median of that workflow's known
+  # runs; a burst is `burst_threshold` failures in a row, the latest included.
+  policy:
+    spike_factor: 3
+    burst_threshold: 2
+    lookback_hours: 24
+  dedupe_window: "6h"      # the same anomaly is not paged again inside this window
+  escalate_after: "4h"     # still open this long after its first page · escalate, once
+
+secrets:
+  watchdog_webhook:
+    source: env
+    key: WATCHDOG_WEBHOOK_URL
+    # The check's SECRETS line offers a `host:` pin instead. Measured, that
+    # form is refused NIKA-SEC-006 here: the target IS the secret, so its host
+    # is not a static literal (01-envelope.md, layer ②).
+    egress:                       # sanction the one send · the secret IS the URL
+      - to: "nika:notify"
+        host_from_self: true
+  escalation_webhook:
+    source: env
+    key: ESCALATION_WEBHOOK_URL
+    egress:
+      - to: "nika:notify"
+        host_from_self: true
+
+permits:
+  tools: ["nika:chart", "nika:date", "nika:emit", "nika:hash", "nika:inspect", "nika:jq", "nika:json_diff", "nika:notify", "nika:read", "nika:validate", "nika:write"]
+  net:
+    # `host_from_self:` above sanctions the FLOW (the secret may be the URL) —
+    # it does not grant the capability. The host stays unknown at check, so it
+    # is judged at RUN against this bound: name both webhook hosts here or the
+    # send is refused mid-run, after the tokens are already spent.
+    http: ["hooks.example.com"]
+  fs:
+    # The alert state is read where it is written; the seed only when that
+    # file does not exist yet.
+    read:
+      - "examples/fixtures/workflow-watchdog/alert-state.json"
+      - "examples/fixtures/workflow-watchdog/expectations.json"
+      - "examples/fixtures/workflow-watchdog/runs.json"
+      - "out/workflow-watchdog/alert-state.json"
+    # Four files, named exactly · `nika:chart` writes its one SVG at `out:`.
+    write:
+      - "out/workflow-watchdog/alert-state.json"
+      - "out/workflow-watchdog/cost-per-workflow.svg"
+      - "out/workflow-watchdog/report.json"
+      - "out/workflow-watchdog/run-report.json"
+
+tasks:
+  # ══ gather ═══════════════════════════════════════════════════════════
+  runs:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.runs_path }}" }
+
+  expectations:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.expectations_path }}" }
+
+  seed_state:
+    invoke:
+      tool: "nika:read"
+      args: { path: "examples/fixtures/workflow-watchdog/alert-state.json" }
+
+  # First run: no state yet · only not-found is forgiven, and it falls back
+  # to the committed seed (three alerts: two still open, one that has since
+  # cleared).
+  state_raw:
+    with:
+      seed: ${{ tasks.seed_state.output }}
+    invoke:
+      tool: "nika:read"
+      args: { path: "out/workflow-watchdog/alert-state.json" }
+    on_error:
+      on_codes: [NIKA-BUILTIN-READ-001]
+      recover: ${{ tasks.seed_state.output }}
+
+  # ══ normalize ════════════════════════════════════════════════════════
+  # `nika:read` returns TEXT · `fromjson` is where it becomes data.
+  records:
+    with:
+      runs: ${{ tasks.runs.output }}
+      expectations: ${{ tasks.expectations.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { runs: "${{ with.runs }}", expectations: "${{ with.expectations }}" }
+        expression: "{ runs: (.runs | fromjson), expectations: (.expectations | fromjson) }"
+
+  records_check:
+    with:
+      records: ${{ tasks.records.output }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.records }}"
+        schema:
+          type: object
+          required: [runs, expectations]
+          properties:
+            runs:
+              type: array
+              items:
+                type: object
+                required: [run_id, workflow, started_at, status, cost_usd]
+                properties:
+                  run_id: { type: string }
+                  workflow: { type: string }
+                  started_at: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" }
+                  status: { type: string, enum: [success, failed] }
+                  cost_usd: { type: number, minimum: 0 }
+                  duration_ms: { type: integer, minimum: 0 }
+            expectations:
+              type: array
+              items:
+                type: object
+                required: [workflow, cadence_hours, cost_ceiling_usd]
+                properties:
+                  workflow: { type: string }
+                  cadence_hours: { type: number, exclusiveMinimum: 0 }
+                  cost_ceiling_usd: { type: number, minimum: 0 }
+
+  dedupe_since:
+    invoke:
+      tool: "nika:date"
+      args: { op: subtract, base: "${{ inputs.as_of }}", duration: "${{ const.dedupe_window }}" }
+
+  escalate_before:
+    invoke:
+      tool: "nika:date"
+      args: { op: subtract, base: "${{ inputs.as_of }}", duration: "${{ const.escalate_after }}" }
+
+  # ══ judge ════════════════════════════════════════════════════════════
+  # Three checks per workflow. A run that started after `as_of` is not known
+  # yet, which is what lets one fixture show a healthy evening and a broken
+  # morning. The median is the upper one (`.[length / 2 | floor]`) over every
+  # known run, the spike included. Each anomaly carries an `identity` that
+  # stays the same while it is the same problem: the last success for a
+  # stale job, the run id for a spike, the first failure for a streak.
+  # Records that fail validation are an anomaly of their own.
+  scan:
+    with:
+      records: ${{ tasks.records.output }}
+      check: ${{ tasks.records_check.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { as_of: "${{ inputs.as_of }}", policy: "${{ const.policy }}", records: "${{ with.records }}", check: "${{ with.check }}" }
+        expression: >-
+          (.as_of | fromdateiso8601) as $now
+          | .policy as $p | .as_of as $asof
+          | if .check.valid != true then
+              { as_of: $asof, records_valid: false,
+                anomalies: [{ workflow: "*", kind: "records_invalid", identity: "*|records_invalid",
+                              errors: (.check.errors | length) }],
+                cost_by_workflow: [] }
+            else
+              (.records.runs | map(select((.started_at | fromdateiso8601) <= $now))) as $known
+              | .records.expectations as $expect
+              | [ $expect[] as $e
+                  | ($known | map(select(.workflow == $e.workflow)) | sort_by(.started_at)) as $r
+                  | ($r | map(select(.status == "success")) | last) as $ok
+                  | ($r | map(.cost_usd) | sort | if length == 0 then null else .[length / 2 | floor] end) as $median
+                  | (if $ok == null then
+                       [{ workflow: $e.workflow, kind: "stale", identity: ($e.workflow + "|stale|never"),
+                          last_success: null, cadence_hours: $e.cadence_hours }]
+                     elif ($now - ($ok.started_at | fromdateiso8601)) > ($e.cadence_hours * 3600) then
+                       [{ workflow: $e.workflow, kind: "stale", identity: ($e.workflow + "|stale|" + $ok.started_at),
+                          last_success: $ok.started_at, cadence_hours: $e.cadence_hours,
+                          hours_since: ((($now - ($ok.started_at | fromdateiso8601)) / 360 | floor) / 10) }]
+                     else [] end)
+                    + ($r
+                       | map(select((.started_at | fromdateiso8601) > ($now - $p.lookback_hours * 3600)
+                                    and (.cost_usd > $e.cost_ceiling_usd or .cost_usd > $p.spike_factor * $median)))
+                       | map({ workflow: $e.workflow, kind: "cost_spike", identity: ($e.workflow + "|cost_spike|" + .run_id),
+                               run_id, started_at, cost_usd, ceiling_usd: $e.cost_ceiling_usd, median_usd: $median,
+                               above_ceiling: (.cost_usd > $e.cost_ceiling_usd) }))
+                    + (($r | map(.status) | reverse | (index("success") // length)) as $streak
+                       | if $streak >= $p.burst_threshold then
+                           ($r[length - $streak].started_at) as $first
+                           | [{ workflow: $e.workflow, kind: "failure_burst", identity: ($e.workflow + "|failure_burst|" + $first),
+                                consecutive_failures: $streak, first_failure: $first, last_failure: ($r | last | .started_at) }]
+                         else [] end)
+                  | .[] ] as $anomalies
+              | { as_of: $asof, records_valid: true, anomalies: $anomalies,
+                  cost_by_workflow: ($expect | map(.workflow as $w | { workflow: $w,
+                    cost_usd: (([$known[] | select(.workflow == $w and ((.started_at | fromdateiso8601) > ($now - $p.lookback_hours * 3600))) | .cost_usd] | add // 0) * 100 | round / 100) })) }
+            end
+
+  # One stable fingerprint per anomaly · the key of the alert state.
+  fingerprints:
+    with:
+      anomalies: ${{ tasks.scan.output.anomalies }}
+    when: ${{ size(with.anomalies) > 0 }}
+    for_each:
+      items: ${{ with.anomalies }}
+      max_parallel: 4
+    invoke:
+      tool: "nika:hash"
+      args: { content: "${{ item.identity }}", algo: sha256 }
+
+  # The dedupe and escalation table, first match wins ·
+  #   never paged                                              → page
+  #   not escalated yet, first page at or before `escalate_before` → escalate
+  #   last page after `dedupe_since`                           → suppress
+  #   otherwise (paged, but long enough ago)                   → page again
+  # The timestamps are all `…Z` ISO strings, so they compare as text.
+  triage:
+    with:
+      anomalies: ${{ tasks.scan.output.anomalies }}
+      fps: ${{ tasks.fingerprints.output }}
+      state: ${{ tasks.state_raw.output }}
+      dd: ${{ tasks.dedupe_since.output }}
+      eb: ${{ tasks.escalate_before.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { anomalies: "${{ with.anomalies }}", fps: "${{ with.fps }}", state: "${{ with.state }}", dd: "${{ with.dd }}", eb: "${{ with.eb }}", as_of: "${{ inputs.as_of }}" }
+        expression: >-
+          .dd as $dd | .eb as $eb | .as_of as $asof
+          | ((.state | fromjson? | .alerts?) // {}) as $state
+          | [.anomalies, (.fps // [])] | transpose | map(.[0] + { fingerprint: .[1] })
+          | map(. as $a | $state[$a.fingerprint] as $s
+              | $a + { previous: $s,
+                       decision: (if $s == null then "page"
+                                  elif $s.escalated_at == null and $s.first_paged <= $eb then "escalate"
+                                  elif $s.last_paged > $dd then "suppress"
+                                  else "page" end) })
+          | { all: ., previous: { alerts: $state },
+              page: map(select(.decision == "page")),
+              escalate: map(select(.decision == "escalate")),
+              suppress: map(select(.decision == "suppress")),
+              page_title: ("Workflow watchdog · " + (map(select(.decision == "page")) | length | tostring)
+                           + " to look at as of " + $asof + " · "
+                           + (map(select(.decision == "page")) | map(.workflow + " " + .kind) | join(", "))),
+              page_severity: (if any(.[]; .decision == "page" and .kind != "cost_spike") then "error" else "warn" end),
+              escalation_title: ("ESCALATION · still open, first paged at or before " + $eb + " · "
+                                 + (map(select(.decision == "escalate")) | map(.workflow + " " + .kind) | join(", "))) }
+
+  # ══ act ══════════════════════════════════════════════════════════════
+  summary:
+    with:
+      page: ${{ tasks.triage.output.page }}
+      escalate: ${{ tasks.triage.output.escalate }}
+    when: ${{ size(with.page) > 0 || size(with.escalate) > 0 }}   # nothing to send · no model call
+    on_error:
+      # Labelled · when the call fails the sends still go out with the jq
+      # facts (measured on an earlier draft by forcing a schema failure).
+      recover: { headline: "(summary unavailable · the model call failed · the facts are attached)", lines: [] }
+    infer:
+      max_tokens: 1500               # think block + a headline and a few lines
+      prompt: |
+        A watchdog over scheduled automations is about to page about these
+        anomalies as of ${{ inputs.as_of }} ·
+        new or repeated · ${{ with.page }}
+        still open after the first page · ${{ with.escalate }}
+        Write the page · one headline, then one line per workflow · what is
+        wrong and the first thing to check. Use only the numbers given here.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [headline, lines]
+        properties:
+          headline: { type: string, maxLength: 120 }
+          lines:
+            type: array
+            maxItems: 6
+            items: { type: string, maxLength: 200 }
+
+  # The message is the jq title, so the page states the facts whatever the
+  # model wrote; the summary rides beside them in `data:`. No `retry:` on
+  # either send · a webhook call that timed out may still have delivered,
+  # and a second try would page twice. A send not recorded as accepted
+  # leaves the state as it was, so the next run sends it again (measured).
+  page:
+    with:
+      triage: ${{ tasks.triage.output }}
+      summary: ${{ tasks.summary.output }}
+    when: ${{ size(with.triage.page) > 0 }}
+    on_error:
+      recover: { sent: false, note: "the page did not go out · see the trace" }
+    invoke:
+      tool: "nika:notify"
+      args:
+        channel: webhook
+        target: "${{ secrets.watchdog_webhook }}"
+        message: "${{ with.triage.page_title }}"
+        severity: "${{ with.triage.page_severity }}"
+        data: { anomalies: "${{ with.triage.page }}", summary: "${{ with.summary }}" }
+
+  escalate:
+    with:
+      triage: ${{ tasks.triage.output }}
+      summary: ${{ tasks.summary.output }}
+    when: ${{ size(with.triage.escalate) > 0 }}
+    on_error:
+      recover: { sent: false, note: "the escalation did not go out · see the trace" }
+    invoke:
+      tool: "nika:notify"
+      args:
+        channel: webhook
+        target: "${{ secrets.escalation_webhook }}"
+        message: "${{ with.triage.escalation_title }}"
+        severity: error
+        data: { anomalies: "${{ with.triage.escalate }}", summary: "${{ with.summary }}" }
+
+  # Did the send go out? `nika:notify` returns null on an accepted delivery
+  # (stdlib/builtins-v0.1.md, `nika:notify`) and the recovery above is an
+  # object. Whatever a send returns is tainted by its webhook secret, and the
+  # check refuses it reaching a write (NIKA-SEC-006, measured). A `when:`
+  # only decides: the marker below runs or not and outputs its own literal,
+  # so one bit reaches the state and the secret does not (check green,
+  # measured). `size(...) > 0` keeps a skipped send, also null, from
+  # reading as sent.
+  page_sent:
+    with:
+      result: ${{ tasks.page.output }}
+      page: ${{ tasks.triage.output.page }}
+    when: ${{ size(with.page) > 0 && with.result == null }}
+    invoke:
+      tool: "nika:jq"
+      args: { input: true, expression: "." }
+
+  escalation_sent:
+    with:
+      result: ${{ tasks.escalate.output }}
+      escalate: ${{ tasks.triage.output.escalate }}
+    when: ${{ size(with.escalate) > 0 && with.result == null }}
+    invoke:
+      tool: "nika:jq"
+      args: { input: true, expression: "." }
+
+  # The join · the next state keeps only anomalies still open. A page that
+  # went out moves `last_paged`; one that did not leaves the entry as it was,
+  # so the next run tries again. An entry with no open anomaly is closed,
+  # unless the records were invalid: then nothing is known to be fixed and
+  # every open entry is kept (measured).
+  next_state:
+    with:
+      triage: ${{ tasks.triage.output }}
+      valid: ${{ tasks.scan.output.records_valid }}
+      page_sent: ${{ tasks.page_sent.output }}
+      escalation_sent: ${{ tasks.escalation_sent.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { triage: "${{ with.triage }}", valid: "${{ with.valid }}", ps: "${{ with.page_sent }}", es: "${{ with.escalation_sent }}", as_of: "${{ inputs.as_of }}" }
+        expression: >-
+          .as_of as $now | (.ps == true) as $ps | (.es == true) as $es | .valid as $valid
+          | .triage.previous.alerts as $old
+          | (.triage.all
+             | map(. as $a | $a.previous as $s
+                 | if $a.decision == "page" then
+                     (if $ps then { key: $a.fingerprint, value: { workflow: $a.workflow, kind: $a.kind, identity: $a.identity,
+                                    first_paged: ($s.first_paged // $now), last_paged: $now,
+                                    escalated_at: ($s.escalated_at // null), times: (($s.times // 0) + 1) } }
+                      elif $s != null then { key: $a.fingerprint, value: $s }
+                      else empty end)
+                   elif $a.decision == "escalate" then
+                     { key: $a.fingerprint, value: (if $es then $s + { escalated_at: $now } else $s end) }
+                   else { key: $a.fingerprint, value: $s } end)
+             | from_entries
+             | if $valid then . else $old + . end) as $alerts
+          | { state: { alerts: $alerts },
+              closed: ([$old | keys[] | select(. as $k | $alerts | has($k) | not)] | length),
+              sent: { page: $ps, escalation: $es } }
+
+  state_diff:
+    with:
+      before: ${{ tasks.triage.output.previous }}
+      after: ${{ tasks.next_state.output.state }}
+    invoke:
+      tool: "nika:json_diff"
+      args: { before: "${{ with.before }}", after: "${{ with.after }}" }
+
+  save_state:
+    with:
+      state: ${{ tasks.next_state.output.state }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/workflow-watchdog/alert-state.json"
+        content: "${{ with.state }}"   # one value · the engine serializes it
+        create_dirs: true
+
+  # ══ report ═══════════════════════════════════════════════════════════
+  # One row per expected workflow, so a quiet day still charts; `when:`
+  # covers invalid records, which leave no rows (empty data fails
+  # NIKA-BUILTIN-CHART-001).
+  chart:
+    with:
+      rows: ${{ tasks.scan.output.cost_by_workflow }}
+    when: ${{ size(with.rows) > 0 }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.rows }}"
+        semantics: { workflow: category, cost_usd: usd }
+        chart: { type: bar, x: workflow, y: cost_usd, title: "Cost per workflow · last 24 h" }
+        out: "out/workflow-watchdog/cost-per-workflow.svg"
+
+  save_report:
+    with:
+      scan: ${{ tasks.scan.output }}
+      triage: ${{ tasks.triage.output }}
+      summary: ${{ tasks.summary.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/workflow-watchdog/report.json"
+        create_dirs: true
+        content:
+          as_of: "${{ with.scan.as_of }}"
+          records_valid: "${{ with.scan.records_valid }}"
+          anomalies: "${{ with.triage.all }}"
+          summary: "${{ with.summary }}"
+
+  # `after: … terminal` admits every settled state, skipped included, so the
+  # cost is read once every effect has settled, whatever was sent.
+  cost:
+    after:
+      chart: terminal
+      escalate: terminal
+      page: terminal
+      save_report: terminal
+      save_state: terminal
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  save_run_report:
+    with:
+      triage: ${{ tasks.triage.output }}
+      next: ${{ tasks.next_state.output }}
+      diff: ${{ tasks.state_diff.output }}
+      chart: ${{ tasks.chart.output }}
+      cost: ${{ tasks.cost.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/workflow-watchdog/run-report.json"
+        create_dirs: true
+        content:
+          as_of: "${{ inputs.as_of }}"
+          counts:
+            anomalies: "${{ size(with.triage.all) }}"
+            paged: "${{ size(with.triage.page) }}"
+            escalated: "${{ size(with.triage.escalate) }}"
+            suppressed: "${{ size(with.triage.suppress) }}"
+            closed: "${{ with.next.closed }}"
+          sent: "${{ with.next.sent }}"
+          decisions: "${{ with.triage.all }}"
+          state_changes: "${{ with.diff }}"
+          chart: "${{ with.chart }}"
+          cost: "${{ with.cost }}"
+
+  event:
+    with:
+      triage: ${{ tasks.triage.output }}
+      next: ${{ tasks.next_state.output }}
+    invoke:
+      tool: "nika:emit"
+      args:
+        event_type: "workflow.watchdog.scan"
+        payload:
+          as_of: "${{ inputs.as_of }}"
+          paged: "${{ size(with.triage.page) }}"
+          escalated: "${{ size(with.triage.escalate) }}"
+          suppressed: "${{ size(with.triage.suppress) }}"
+          sent: "${{ with.next.sent }}"
+
+outputs:
+  anomalies:
+    value: ${{ tasks.triage.output.all }}
+    description: "Every anomaly with its fingerprint and decision · page, escalate or suppress"
+  sent:
+    value: ${{ tasks.next_state.output.sent }}
+    description: "Whether the page and the escalation were accepted by their webhooks"
+  state_changes:
+    value: ${{ tasks.state_diff.output }}
+    description: "RFC 6902 operations from the previous alert state to this one"

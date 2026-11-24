@@ -16,6 +16,44 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Added · a first pack of recipe jobs (2026-11-24)
+
+- Seventeen job workflows join `examples/`, each with its fixtures under
+  `examples/fixtures/<name>/`: `inbox-triage`, `receipt-ledger`,
+  `lead-enrichment`, `feed-digest`, `docs-answer-desk`,
+  `comfyui-image-chain`, `ci-failure-triage`, `workflow-watchdog`,
+  `listing-link-audit`, `source-to-45-locales`, `seo-site-audit`,
+  `programmatic-seo-pages`, `qr-art-forge`, `launch-campaign-forge`,
+  `quote-compare-decide`, `subscription-renewal-radar` and
+  `refund-chaser`. Each runs 21 to 30 tasks in phases (gather, normalize,
+  judge, act, report), proves its jq law on hand-computed cases before the
+  first model call, keeps state between runs where the job needs it, and
+  writes a `run-report.json` built as a value under `out/<name>/`.
+- Every file checks with `--native-strict` and no finding on engine
+  0.125.0. Sixteen run offline under `--model mock/echo` with the exit their
+  header states; `launch-campaign-forge` declares that it cannot (its Codex
+  seat over ACP refuses the mock, NIKA-1801) and `qr-art-forge` needs the
+  open-source `qrscan` on `PATH`. Some keep the `assert-quarantine` hint.
+- `README-jobs.md` lists them, and `manifest.yaml` carries them.
+
+### Fixed · three authoring claims the recipe pack measured false (2026-11-24)
+
+- `CONVENTIONS.md` §8 said an input with `required: false` and a `default:`
+  is unreachable from `--var`. A `--var` overrides a declared default
+  (01 §inputs), and the engine does so.
+- `CONVENTIONS.md` §9.7 said a red last `nika:assert` quarantines `out/`.
+  Any failed run moves the files it wrote, under `out/` or elsewhere, to
+  `.nika/quarantine/<trace>/`, a red assert anywhere in the DAG or a failed
+  jq task alike; a file a `nika:edit` changed stays in place with its
+  original under `originals/`, and a failure absorbed by `on_error:` moves
+  nothing.
+- `README-jobs.md` advised an `on_error: { recover: … }` sample for every
+  network step. That fits a read. On an effect (a POST, a send) a recovered
+  task settles `success`, so later steps record a send that never happened
+  as done: an effect uses `on_error: { skip: true }` and the steps after it
+  test `tasks.<id>.status`, or its recovery value says it was not sent and
+  is tested.
+
 ### Changed · `NIKA-SEC-009` credits a choice or input gate only where its answer is tested (2026-11-24)
 
 - 05 said any blocking `nika:prompt` (no `default:`) that dominates the

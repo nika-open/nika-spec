@@ -1,0 +1,804 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · admin / finance
+#
+# The refund chaser · the money a small company is owed back (a double
+# charge, a plan still billed after it was cancelled, a disputed invoice)
+# sits in one register. Each run ages every claim, finds the ones whose next
+# reminder is due (seven days after the last contact), drafts that reminder
+# in the claim's own language, polite at first and firmer once the claim is
+# past 30 days, POSTs it to the company's mail relay under an idempotency
+# key, and writes the register back with the reminder recorded. A claim
+# someone marked `refunded` is closed and its money counted as recovered.
+#
+# Why the one human gate sits at the ROOT, before anything is read · this
+# file reads a private register, sends mail, and records the relay's answer
+# in the register the next run reads first. That carried answer is
+# untrusted input, so private read + untrusted ingress + egress is the
+# lethal trifecta (NIKA-SEC-009). Measured on this binary: a confirm gate
+# placed just before the POST is refused, because the reads above it
+# already hold the last run's answer; only a gate that dominates every read
+# clears it. So the question comes first, and « no » means nothing is read,
+# sent or written.
+#
+# Demonstrates ·
+#   - a root `confirm` gate that every task binds and tests (`with.go`)
+#   - a working copy under out/ that falls back to the committed seed on the
+#     first run (`on_error` on NIKA-BUILTIN-READ-001 only)
+#   - `nika:validate` three times · the register before it is trusted, the
+#     model's drafts before they are written or sent, the next register
+#     before it replaces the old one
+#   - `nika:date` fans · each claim's age, and its next reminder at J+7
+#   - triage in `nika:jq` · due or waiting, polite or firm, refunded
+#     closures, money by age bucket, all in integer cents, no model math
+#   - `nika:hash` per (claim, reminder number) · the idempotency key the
+#     POST carries, identical on every rerun of the same reminder
+#   - one schema-typed `infer` per due claim, in the claim's language,
+#     bounded by `max_tokens` and a `max_items` cap
+#   - a keyed POST fan with `retry`, `timeout` and a labelled `recover`
+#   - `nika:uuid` v7 batch id · `nika:json_merge_patch` on the register ·
+#     `nika:convert` to a formula-guarded CSV · `nika:chart` of open money by
+#     age · `nika:inspect` cost folded into the run report
+#
+# Needs · nothing to rehearse. To send for real · point `const.outbox_url`
+#   AND `permits.net.http` at your mail relay, in the same edit. The relay
+#   must take a keyless JSON POST and honour the `idempotency-key` header
+#   (see `post` for why there is no auth header).
+# It runs green but PAUSES at `approve` (exit 4, not a failure) —
+#   nika run <file> --resume <trace> --answer approve=true
+#
+# Run · nika run examples/refund-chaser.nika --model mock/echo --answer approve=true
+#       · mail.example.com is a documentation host the engine refuses to
+#         dial (measured · NIKA-BUILTIN-FETCH-001 « documentation host … is
+#         not dialed (RFC 2606/6761) », marked transient, so the rehearsal
+#         spends its retries, about 4 s), then every POST recovers: nothing
+#         leaves, the claims stay due, and the refunded claim is still
+#         closed in the register copy
+#       · decline · --answer approve=false (nothing read, sent or written)
+#       · another day · add --var as_of=2026-12-01
+#       · start over from the seed · rm -rf out/refund-chaser
+
+nika: refund-chaser
+
+model: ollama/qwen3.5:4b   # local · zero key · `--model mock/echo` rehearses the whole file
+
+# `post` declares a `timeout:` · a wall-clock bound needs the system clock.
+run:
+  clock: system
+
+inputs:
+  as_of:
+    type: string
+    default: "2026-11-24"
+    description: "The day the chaser stands on (YYYY-MM-DD) · ages and due dates count from it"
+  reminder_every_days:
+    type: integer
+    default: 7
+    description: "Days between two reminders on the same claim (J+7 by default)"
+  firm_after_days:
+    type: integer
+    default: 30
+    description: "A claim open longer than this many days gets the firmer template"
+
+const:
+  # Point these at your own files and move the `permits.fs` literals in the
+  # same edit · a permit cannot interpolate a const (NIKA-AUTH-007).
+  seed_path: "examples/fixtures/refund-chaser/pending-refunds.json"
+  register_path: "out/refund-chaser/register.json"
+  outbox_url: "https://mail.example.com/v1/messages"
+  sender:
+    name: "Quarry Lane Studio Accounts"
+    email: "accounts@quarrylane.example.com"
+
+  # Age buckets for the chart and the report · the first bucket whose
+  # `max_days` holds the claim's age wins.
+  age_buckets:
+    - { label: "0-14 days", max_days: 14 }
+    - { label: "15-30 days", max_days: 30 }
+    - { label: "31-60 days", max_days: 60 }
+    - { label: "61+ days", max_days: 36500 }
+
+  # The two templates, per language · guidance for the model, not text it
+  # copies. Only `en` and `fr` exist, and the register schema below admits
+  # only those two, so a claim in a third language is rejected at the door
+  # instead of drafted with no template.
+  tone:
+    polite:
+      en: "Courteous and brief. Thank them, restate the claim in one sentence, and ask on what date the refund will be made. Three to five sentences."
+      fr: "Courtois et bref, en vouvoyant. Remerciez, rappelez la réclamation en une phrase et demandez à quelle date le remboursement sera effectué. Trois à cinq phrases."
+    firm:
+      en: "Firm and still professional. Say how long the claim has been open and that earlier reminders went unanswered, and ask for the refund within seven days. Say that otherwise we will ask our bank to dispute the charge. No other consequence."
+      fr: "Ferme et toujours professionnel, en vouvoyant. Indiquez depuis combien de temps la réclamation est ouverte et que les relances précédentes sont restées sans réponse, puis demandez le remboursement sous sept jours. Dites qu'à défaut nous demanderons à notre banque de contester le prélèvement. Aucune autre conséquence."
+
+  # The facts block under every message is written by this file, not by the
+  # model, in the claim's language.
+  words:
+    en:
+      claim: "Claim"
+      opened: "opened"
+      reminder: "reminder"
+      kinds: { double_charge: "double charge", cancelled_still_billed: "plan billed after cancellation", disputed_invoice: "disputed invoice" }
+    fr:
+      claim: "Réclamation"
+      opened: "ouverte le"
+      reminder: "relance n°"
+      kinds: { double_charge: "double prélèvement", cancelled_still_billed: "abonnement facturé après résiliation", disputed_invoice: "facture contestée" }
+
+  # What a register must look like before anything in it is trusted. The
+  # claim id becomes a file name, the contact becomes a `To:` header and a
+  # POST field, so both are pinned: no path separator in an id, no line
+  # break or angle bracket in a contact. One currency only, because the
+  # totals add amounts; a second currency is rejected, never summed.
+  register_schema:
+    type: object
+    required: [claims]
+    properties:
+      claims:
+        type: object
+        propertyNames: { pattern: "^RF-[0-9]{4}-[0-9]{2}$" }
+        additionalProperties:
+          type: object
+          required: [vendor, kind, language, opened_on, amount, currency, contact, status, last_contact_on, reminders]
+          properties:
+            vendor: { type: string, minLength: 1, maxLength: 80, pattern: "^[^\\r\\n]+$" }
+            kind: { enum: [double_charge, cancelled_still_billed, disputed_invoice] }
+            language: { enum: [en, fr] }
+            opened_on: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            last_contact_on: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            amount: { type: string, pattern: "^[0-9]{1,7}\\.[0-9]{2}$" }
+            currency: { const: EUR }
+            reference: { type: string, maxLength: 200, pattern: "^[^\\r\\n]*$" }
+            contact:
+              type: object
+              required: [name, email]
+              properties:
+                name: { type: string, maxLength: 80, pattern: "^[^\\r\\n<>]*$" }
+                email: { type: string, maxLength: 120, pattern: "^[^@\\s<>]+@[^@\\s<>]+\\.[a-z]{2,}$" }
+            status: { enum: [open, refunded, closed] }
+            refunded_on: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            refunded_amount: { type: string, pattern: "^[0-9]{1,7}\\.[0-9]{2}$" }
+            closed_on: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            reminder_count: { type: integer, minimum: 0 }
+            reminders:
+              type: array
+              items:
+                type: object
+                required: [n, sent_on]
+                properties:
+                  n: { type: integer, minimum: 1 }
+                  sent_on: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+                  key: { type: string, pattern: "^[0-9a-f]{64}$" }
+                  batch: { type: string, maxLength: 64 }
+
+  # What the model's drafts must satisfy before one byte is written or sent.
+  # The subject becomes a mail header, so a line break is refused. No link,
+  # no address: the message must not route anyone anywhere. The `recover`
+  # stand-in on `drafts` starts with « (no draft », which this policy
+  # refuses, so a dead model can never mail a placeholder.
+  draft_policy:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [subject, body]
+      properties:
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: "^[^\\r\\n]+$"
+          not: { pattern: "^\\(no draft|https?://|www\\." }
+        body:
+          type: string
+          minLength: 1
+          maxLength: 1500
+          not: { pattern: "https?://|www\\.|@" }
+
+permits:
+  tools:
+    - "nika:chart"
+    - "nika:convert"
+    - "nika:date"
+    - "nika:fetch"
+    - "nika:hash"
+    - "nika:inspect"
+    - "nika:jq"
+    - "nika:json_merge_patch"
+    - "nika:prompt"
+    - "nika:read"
+    - "nika:uuid"
+    - "nika:validate"
+    - "nika:write"
+  net:
+    # The mail relay, and nothing else. Change it with `const.outbox_url`.
+    http: ["mail.example.com"]
+  fs:
+    read:
+      - "examples/fixtures/refund-chaser/pending-refunds.json"
+      - "out/refund-chaser/register.json"
+    write:
+      - "out/refund-chaser/register.json"
+      - "out/refund-chaser/outbox/*.eml"
+      - "out/refund-chaser/open-by-age.svg"
+      - "out/refund-chaser/open-claims.csv"
+      - "out/refund-chaser/run-report.json"
+
+tasks:
+  # ── gate ───────────────────────────────────────────────────────────────
+  # No `default:` · an unattended run pauses here (exit 4) instead of
+  # guessing. Every task below binds the answer and runs only on `true`.
+  approve:
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: confirm
+        message: "Chase the refund claims due on ${{ inputs.as_of }}? Due reminders are drafted, POSTed to ${{ const.outbox_url }}, and recorded in out/refund-chaser/register.json. No means nothing is read, sent or written."
+
+  # ── gather ─────────────────────────────────────────────────────────────
+  # The committed seed is read every run; the working copy wins once a run
+  # has written one.
+  seed:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.seed_path }}" }
+
+  # Only « no file at this path » (NIKA-BUILTIN-READ-001) recovers, which is
+  # the first run. Any other read failure fails loudly instead of silently
+  # restarting from the seed, which has forgotten every reminder sent since.
+  working:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.register_path }}" }
+    on_error:
+      on_codes: [NIKA-BUILTIN-READ-001]
+      recover: ""
+
+  # ── normalize ──────────────────────────────────────────────────────────
+  register:
+    with:
+      go: ${{ tasks.approve.output }}
+      seed: ${{ tasks.seed.output }}
+      working: ${{ tasks.working.output }}
+    when: ${{ with.go == true && with.seed != null && with.working != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { seed: "${{ with.seed }}", working: "${{ with.working }}" }
+        expression: |
+          (.working != "") as $w
+          | { source: (if $w then "working copy" else "seed" end),
+              data: ((if $w then .working else .seed end) | fromjson) }
+
+  register_check:
+    with:
+      go: ${{ tasks.approve.output }}
+      r: ${{ tasks.register.output }}
+    when: ${{ with.go == true && with.r != null }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.r.data }}"
+        schema: "${{ const.register_schema }}"
+
+  # Branch point · a rejected register stops the chase here; the report
+  # still lands and carries the validator's errors.
+  claims:
+    with:
+      go: ${{ tasks.approve.output }}
+      r: ${{ tasks.register.output }}
+      v: ${{ tasks.register_check.output }}
+    when: ${{ with.go == true && with.r != null && with.v != null && with.v.valid == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: "${{ with.r.data }}"
+        expression: |
+          .claims | to_entries
+          | map(.key as $id | .value
+                | . + { id: $id,
+                        n: ((.reminders | length) + 1),
+                        opened_ts: (.opened_on + "T00:00:00Z"),
+                        contact_ts: (.last_contact_on + "T00:00:00Z") })
+          | { open: map(select(.status == "open")),
+              refunded: map(select(.status == "refunded")),
+              closed: map(select(.status == "closed")) }
+
+  # ── judge ──────────────────────────────────────────────────────────────
+  # `nika:date` refuses a bare YYYY-MM-DD (NIKA-BUILTIN-DATE-001, measured),
+  # hence the `T00:00:00Z`. Results come back in item order, which is what
+  # lets `triage` zip them by position.
+  age:
+    with:
+      go: ${{ tasks.approve.output }}
+      c: ${{ tasks.claims.output }}
+    when: ${{ with.go == true && with.c != null && size(with.c.open) > 0 }}
+    for_each:
+      items: ${{ with.c.open }}
+      max_parallel: 8
+      max_items: 500
+    invoke:
+      tool: "nika:date"
+      args:
+        op: diff
+        start: "${{ item.opened_ts }}"
+        end: "${{ inputs.as_of }}T00:00:00Z"
+        unit: days
+
+  next_due:
+    with:
+      go: ${{ tasks.approve.output }}
+      c: ${{ tasks.claims.output }}
+    when: ${{ with.go == true && with.c != null && size(with.c.open) > 0 }}
+    for_each:
+      items: ${{ with.c.open }}
+      max_parallel: 8
+      max_items: 500
+    invoke:
+      tool: "nika:date"
+      args:
+        op: add
+        base: "${{ item.contact_ts }}"
+        duration: "${{ inputs.reminder_every_days }}d"
+
+  # The whole decision, in one place · due when the next reminder date is
+  # today or earlier, firm past `firm_after_days`, the guidance and the
+  # facts block picked per language. Money stays in integer cents until it
+  # is printed.
+  triage:
+    with:
+      go: ${{ tasks.approve.output }}
+      c: ${{ tasks.claims.output }}
+      age: ${{ tasks.age.output }}
+      next: ${{ tasks.next_due.output }}
+    when: ${{ with.go == true && with.c != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          claims: "${{ with.c }}"
+          age: "${{ with.age }}"
+          next: "${{ with.next }}"
+          as_of: "${{ inputs.as_of }}"
+          firm_after: "${{ inputs.firm_after_days }}"
+          tone: "${{ const.tone }}"
+          words: "${{ const.words }}"
+          edges: "${{ const.age_buckets }}"
+        expression: |
+          def cents: tonumber * 100 | round;
+          def money: (. / 100 | floor | tostring) + "." + ((. % 100) | tostring | if length < 2 then "0" + . else . end);
+          def bucket($e; $a): first($e[] | select($a <= .max_days) | .label);
+          .as_of as $today | .firm_after as $firm | .tone as $tone | .words as $w | .edges as $edges
+          | .claims.closed as $closed
+          | (.claims.refunded | map({ id, vendor, refunded_on, cents: ((.refunded_amount // .amount) | cents) })) as $closing
+          | ([ range(0; (.claims.open | length)) as $i
+               | .claims.open[$i] + { age_days: .age[$i], next_reminder_on: (.next[$i] | .[0:10]) } ]
+             | map(. + { due: (.next_reminder_on <= $today),
+                         tone: (if .age_days > $firm then "firm" else "polite" end),
+                         bucket: bucket($edges; .age_days),
+                         cents: (.amount | cents),
+                         reminders_sent: (.reminders | length) })
+             | map(. + { lane: (if .due then .tone else "waiting" end) })) as $rows
+          | ($rows | map(select(.due))
+             | map(. + { guidance: $tone[.tone][.language],
+                         kind_label: $w[.language].kinds[.kind],
+                         footer: "\($w[.language].claim) \(.id) · \(.amount) \(.currency) · \(.reference) · \($w[.language].opened) \(.opened_on) · \($w[.language].reminder) \(.n)" })) as $due
+          | ($edges | map(.label as $l
+               | { bucket: $l,
+                   open_eur: (([ $rows[] | select(.bucket == $l) | .cents ] | add // 0) / 100),
+                   claims: ([ $rows[] | select(.bucket == $l) ] | length) })) as $by_age
+          | { as_of: $today,
+              due: $due,
+              waiting: ($rows | map(select(.due | not)) | map({ id, vendor, age_days, next_reminder_on })),
+              closing: $closing,
+              counts: { open: ($rows | length),
+                        due: ($due | length),
+                        polite: ($due | map(select(.tone == "polite")) | length),
+                        firm: ($due | map(select(.tone == "firm")) | length),
+                        waiting: ($rows | map(select(.due | not)) | length),
+                        closing: ($closing | length),
+                        closed_before: ($closed | length) },
+              by_age: $by_age,
+              chart_rows: ($by_age | map({ bucket, open_eur })),
+              money: { open_eur: ([ $rows[].cents ] | add // 0 | money),
+                       recovered_this_run_eur: ([ $closing[].cents ] | add // 0 | money),
+                       recovered_before_eur: ([ $closed[] | (.refunded_amount // .amount) | cents ] | add // 0 | money) },
+              ledger: ($rows | map({ id, vendor, kind, language, opened_on, age_days, amount, currency, reminders_sent, next_reminder_on, lane })) }
+
+  # ── act ────────────────────────────────────────────────────────────────
+  # One key per (claim, reminder number) · a rerun of the same reminder gets
+  # the same key, so a relay that honours it delivers it once even when the
+  # last run died between the POST and the register write.
+  keys:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+    when: ${{ with.go == true && with.t != null && size(with.t.due) > 0 }}
+    for_each:
+      items: ${{ with.t.due }}
+      max_parallel: 8
+      max_items: 20
+    invoke:
+      tool: "nika:hash"
+      args:
+        algo: sha256
+        content: { claim: "${{ item.id }}", reminder: "${{ item.n }}" }
+
+  # Branch point · nothing due, no model call. `max_items: 20` caps a run at
+  # twenty drafts under `max_tokens` each; a 21st due claim fails the fan
+  # before its first call (NIKA-VAR-006) instead of quietly costing more.
+  drafts:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+    when: ${{ with.go == true && with.t != null && size(with.t.due) > 0 }}
+    for_each:
+      items: ${{ with.t.due }}
+      max_parallel: 2
+      max_items: 20
+    timeout: "300s"              # a local model loads on its first call
+    retry:
+      max_attempts: 2
+      backoff_ms: 2000
+    on_error:
+      # The labelled stand-in · `const.draft_policy` refuses it, so the
+      # batch is held and the report says why; nothing is sent.
+      recover: { subject: "(no draft · the model call failed)", body: "(no draft)" }
+    infer:
+      # a reasoning model needs 16384 here, or a documented run.reasoning.effort: low
+      max_tokens: 700
+      system: |
+        You write short refund reminders for a small company's accounts desk.
+        Write only in the language you are given. Use only the facts given;
+        never invent a date, an amount, a deadline or a legal step. No link,
+        no email address, no signature: a facts block and the signature are
+        added under your text. Return the subject and the body.
+      prompt: |
+        Language · ${{ item.language }}
+        Tone · ${{ item.tone }} · ${{ item.guidance }}
+        Vendor · ${{ item.vendor }} (${{ item.contact.name }})
+        Claim · ${{ item.kind_label }} · ${{ item.reference }}
+        Amount · ${{ item.amount }} ${{ item.currency }}
+        Open for ${{ item.age_days }} days · this is reminder ${{ item.n }}, after ${{ item.reminders_sent }} earlier
+      schema:
+        type: object
+        additionalProperties: false
+        required: [subject, body]
+        properties:
+          subject: { type: string, maxLength: 120 }
+          body: { type: string, maxLength: 1500 }
+
+  # The drafts are checked as one batch · one bad draft holds them all, so
+  # a send is never half a batch the report cannot explain.
+  drafts_check:
+    with:
+      go: ${{ tasks.approve.output }}
+      d: ${{ tasks.drafts.output }}
+    when: ${{ with.go == true && with.d != null }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.d }}"
+        schema: "${{ const.draft_policy }}"
+
+  # A copy of every message as it is handed to the relay, written BEFORE the
+  # POST · the outbox shows what was attempted, the report says what was
+  # accepted. Header lines, a blank line, then the body: the shape of an
+  # RFC 5322 message, with LF line ends, for a person to read.
+  save_drafts:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+      d: ${{ tasks.drafts.output }}
+      k: ${{ tasks.keys.output }}
+      vetted: ${{ tasks.drafts_check.output }}
+    when: ${{ with.go == true && with.vetted != null && with.vetted.valid == true && with.t != null && with.d != null && with.k != null }}
+    for_each:
+      items: ${{ with.t.due }}
+      max_parallel: 4
+      max_items: 20
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/refund-chaser/outbox/${{ item.id }}-r${{ item.n }}.eml"
+        create_dirs: true
+        content: |
+          From: ${{ const.sender.name }} <${{ const.sender.email }}>
+          To: ${{ item.contact.name }} <${{ item.contact.email }}>
+          Subject: ${{ with.d[index].subject }}
+          MIME-Version: 1.0
+          Content-Type: text/plain; charset=utf-8
+          X-Claim: ${{ item.id }}
+          X-Reminder: ${{ item.n }} (${{ item.tone }})
+          X-Idempotency-Key: ${{ with.k[index] }}
+
+          ${{ with.d[index].body }}
+
+          ${{ item.footer }}
+          ${{ const.sender.name }}
+
+  batch:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+    when: ${{ with.go == true && with.t != null && size(with.t.due) > 0 }}
+    invoke:
+      tool: "nika:uuid"
+      args: { version: v7 }
+
+  # The send · one keyed POST per due claim. The `idempotency-key` header is
+  # what admits `retry:` on a POST (a keyless one is NIKA-SEC-016). There is
+  # no auth header on purpose: measured, a `${{ secrets.X }}` header taints
+  # the response, and recording that response in the register is then
+  # refused NIKA-SEC-006. Use a relay that trusts this machine instead.
+  # Accepted statuses come back as data; any other status, a refused dial or
+  # a timeout recovers THAT item to the labelled stand-in (spec 03
+  # §fail_fast · `on_error` settles each failed item) and its claim stays
+  # due. An accepted sibling keeps its answer.
+  post:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+      d: ${{ tasks.drafts.output }}
+      k: ${{ tasks.keys.output }}
+      b: ${{ tasks.batch.output }}
+      vetted: ${{ tasks.drafts_check.output }}
+    when: ${{ with.go == true && with.vetted != null && with.vetted.valid == true && with.t != null && with.d != null && with.k != null && with.b != null }}
+    for_each:
+      items: ${{ with.t.due }}
+      max_parallel: 2
+      max_items: 20
+      fail_fast: false
+    timeout: "20s"
+    retry:
+      max_attempts: 3
+      backoff_ms: 1000
+    invoke:
+      tool: "nika:fetch"
+      args:
+        url: "${{ const.outbox_url }}"
+        method: POST
+        headers: { idempotency-key: "${{ with.k[index] }}" }
+        body:
+          from: "${{ const.sender.email }}"
+          from_name: "${{ const.sender.name }}"
+          to: "${{ item.contact.email }}"
+          to_name: "${{ item.contact.name }}"
+          subject: "${{ with.d[index].subject }}"
+          text: "${{ with.d[index].body }}\n\n${{ item.footer }}\n${{ const.sender.name }}"
+          claim: "${{ item.id }}"
+          reminder: "${{ item.n }}"
+          batch: "${{ with.b }}"
+        response: { accept: [200, 201, 202] }
+    on_error:
+      recover: { status_code: null, note: "not delivered · the claim stays due and the next run resends under the same key" }
+
+  # The join · what was sent, what was held, and the register patch. Only a
+  # reminder the relay accepted moves `last_contact_on`, so a held one is
+  # due again on the next run. Refunded claims close whatever the POST did.
+  outcome:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+      post: ${{ tasks.post.output }}
+      k: ${{ tasks.keys.output }}
+      b: ${{ tasks.batch.output }}
+    when: ${{ with.go == true && with.t != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          as_of: "${{ inputs.as_of }}"
+          due: "${{ with.t.due }}"
+          closing: "${{ with.t.closing }}"
+          post: "${{ with.post }}"
+          keys: "${{ with.k }}"
+          batch: "${{ with.b }}"
+        expression: |
+          .as_of as $d | .batch as $b | .closing as $closing
+          | [ range(0; (.due | length)) as $i
+              | .due[$i] as $c | ((.post // [])[$i]) as $p | ((.keys // [])[$i]) as $k
+              | { claim: $c.id, vendor: $c.vendor, language: $c.language, tone: $c.tone,
+                  n: $c.n, key: $k,
+                  status_code: ($p.status_code // null),
+                  sent: (($p.status_code // null) != null),
+                  prior: $c.reminders } ] as $tries
+          | ($tries | map(select(.sent))) as $sent
+          | { tries: ($tries | map(del(.prior))),
+              patch: { claims: (
+                ( [ $sent[] | { (.claim): { last_contact_on: $d, reminder_count: .n,
+                                            reminders: (.prior + [ { n, sent_on: $d, key, batch: $b } ]) } } ]
+                + [ $closing[] | { (.id): { status: "closed", closed_on: $d } } ] )
+                | add // {} ) } }
+
+  # RFC 7396 · objects merge, arrays are replaced whole, which is why the
+  # patch carries the full reminder history plus the new entry.
+  next_register:
+    with:
+      go: ${{ tasks.approve.output }}
+      r: ${{ tasks.register.output }}
+      o: ${{ tasks.outcome.output }}
+    when: ${{ with.go == true && with.r != null && with.o != null }}
+    invoke:
+      tool: "nika:json_merge_patch"
+      args:
+        target: "${{ with.r.data }}"
+        patch: "${{ with.o.patch }}"
+
+  # Never write a register the next run would reject.
+  next_check:
+    with:
+      go: ${{ tasks.approve.output }}
+      n: ${{ tasks.next_register.output }}
+    when: ${{ with.go == true && with.n != null }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.n }}"
+        schema: "${{ const.register_schema }}"
+
+  save_register:
+    with:
+      go: ${{ tasks.approve.output }}
+      n: ${{ tasks.next_register.output }}
+      v: ${{ tasks.next_check.output }}
+    when: ${{ with.go == true && with.n != null && with.v != null && with.v.valid == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "${{ const.register_path }}"
+        content: "${{ with.n }}"
+        create_dirs: true
+
+  # Open money by age · the semantic set is closed and its only money grain
+  # is `usd` (it prints « $ »), so euros ride `count` and the title says EUR.
+  chart:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+    when: ${{ with.go == true && with.t != null && with.t.counts.open > 0 }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.t.chart_rows }}"
+        semantics: { bucket: category, open_eur: count }
+        chart:
+          type: bar
+          x: bucket
+          y: open_eur
+          title: "Open refund claims by age (EUR)"
+        out: out/refund-chaser/open-by-age.svg
+
+  # The open claims as a spreadsheet · vendor names and references come from
+  # the register, so `formula_guard` defuses a cell that starts with `=`.
+  ledger:
+    with:
+      go: ${{ tasks.approve.output }}
+      t: ${{ tasks.triage.output }}
+    when: ${{ with.go == true && with.t != null && with.t.counts.open > 0 }}
+    invoke:
+      tool: "nika:convert"
+      args:
+        input: "${{ with.t.ledger }}"
+        from: json
+        to: csv
+        columns: [id, vendor, kind, language, opened_on, age_days, amount, currency, reminders_sent, next_reminder_on, lane]
+        formula_guard: true
+
+  save_ledger:
+    with:
+      go: ${{ tasks.approve.output }}
+      csv: ${{ tasks.ledger.output }}
+    when: ${{ with.go == true && with.csv != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/refund-chaser/open-claims.csv"
+        content: "${{ with.csv }}"
+        create_dirs: true
+
+  # ── report ─────────────────────────────────────────────────────────────
+  cost:
+    with:
+      go: ${{ tasks.approve.output }}
+    after:
+      drafts: terminal
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  # Always written once the gate said yes · `terminal` admits every settled
+  # state, so a failed artifact still gets its report and the report names
+  # it. Built as a value (CONVENTIONS §5). The drafts' verdict comes from
+  # `drafts_check`, not from `tasks.drafts.status`: a jq that binds anything
+  # of an `infer` task, even its status, is flagged [unproven-law].
+  report:
+    after:
+      save_register: terminal
+      save_drafts: terminal
+      chart: terminal
+      save_ledger: terminal
+    with:
+      go: ${{ tasks.approve.output }}
+      r: ${{ tasks.register.output }}
+      v: ${{ tasks.register_check.output }}
+      t: ${{ tasks.triage.output }}
+      dv: ${{ tasks.drafts_check.output }}
+      o: ${{ tasks.outcome.output }}
+      n: ${{ tasks.next_register.output }}
+      nv: ${{ tasks.next_check.output }}
+      b: ${{ tasks.batch.output }}
+      cost: ${{ tasks.cost.output }}
+      s_post: ${{ tasks.post.status }}
+      s_outbox: ${{ tasks.save_drafts.status }}
+      s_register: ${{ tasks.save_register.status }}
+      s_chart: ${{ tasks.chart.status }}
+      s_ledger: ${{ tasks.save_ledger.status }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          as_of: "${{ inputs.as_of }}"
+          r: "${{ with.r }}"
+          v: "${{ with.v }}"
+          t: "${{ with.t }}"
+          dv: "${{ with.dv }}"
+          o: "${{ with.o }}"
+          n: "${{ with.n }}"
+          nv: "${{ with.nv }}"
+          batch: "${{ with.b }}"
+          cost: "${{ with.cost }}"
+          status:
+            post: "${{ with.s_post }}"
+            outbox: "${{ with.s_outbox }}"
+            register: "${{ with.s_register }}"
+            chart: "${{ with.s_chart }}"
+            ledger: "${{ with.s_ledger }}"
+        expression: |
+          def cents: tonumber * 100 | round;
+          def money: (. / 100 | floor | tostring) + "." + ((. % 100) | tostring | if length < 2 then "0" + . else . end);
+          (.t // {}) as $t | (.o // {}) as $o | ($o.tries // []) as $tries
+          | { chaser: "refund-chaser",
+              as_of: .as_of,
+              batch: .batch,
+              register: { source: (.r.source // null), valid: (.v.valid // false), errors: (.v.errors // []) },
+              counts: (($t.counts // {}) + { sent: ($tries | map(select(.sent)) | length),
+                                             held: ($tries | map(select(.sent | not)) | length) }),
+              reminders: $tries,
+              waiting: ($t.waiting // []),
+              closed_this_run: (($t.closing // []) | map({ id, vendor, refunded_on, recovered_eur: (.cents | money) })),
+              money: (($t.money // {}) + {
+                recovered_to_date_eur: ([ ((.n.claims // {}) | .[]) | select(.status == "closed") | (.refunded_amount // .amount) | cents ] | add // 0 | money) }),
+              by_age: ($t.by_age // []),
+              drafts: { requested: ($t.counts.due // 0), policy_valid: (.dv.valid // null), errors: (.dv.errors // []) },
+              next_register: { valid: (.nv.valid // null), errors: (.nv.errors // []) },
+              artifacts: .status,
+              cost: .cost }
+
+  save_report:
+    with:
+      go: ${{ tasks.approve.output }}
+      rep: ${{ tasks.report.output }}
+    when: ${{ with.go == true && with.rep != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/refund-chaser/run-report.json"
+        content: "${{ with.rep }}"
+        create_dirs: true
+
+outputs:
+  report:
+    value: ${{ tasks.report.output }}
+    description: "The run report, also at out/refund-chaser/run-report.json · null when the gate was declined"
+  reminders:
+    value: ${{ tasks.outcome.output }}
+    description: "Per due claim · tone, language, reminder number, idempotency key and whether the relay took it, plus the register patch"

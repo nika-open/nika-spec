@@ -389,7 +389,7 @@ with the envelope nuke, and a value outside the three refuses with
 
 | Authority | Role |
 |---|---|
-| `inputs:` | a typed parameter · `required: true` the caller supplies at launch · `required: false` + `default:` is the DEPLOYMENT's knob, unreachable from `--var` |
+| `inputs:` | a typed parameter · `required: true` the caller supplies at launch · `required: false` + `default:` runs on its default, and a `--var` the caller passes overrides it (`01-envelope.md` §inputs · measured on 0.125.0) |
 | `const:` | a fixed value baked in · never caller-supplied |
 | `secrets:` | a governed store reference · masked · `egress:`-gated |
 
@@ -449,8 +449,14 @@ The named bundle is [`14-decide-publish`](14-decide-publish.nika).
    "**/README.md"`. Hint `glob-readme`.
 6. **jq `. as $c` then `($c | map(...))`.** A bare `map(` after `. as $c`
    maps the current value (often a pair). Hint `jq-as-map`.
-7. **A red last `nika:assert` quarantines `out/`.** Look in
-   `.nika/quarantine/<trace>/`. Hint `assert-quarantine`.
+7. **A failed run quarantines the files it wrote.** A red `nika:assert`
+   is one way, wherever it sits in the DAG; any unhandled task failure
+   (a jq `error`, a refused fetch) is another. The files that run wrote,
+   under `out/` or elsewhere, move to `.nika/quarantine/<trace>/`; files
+   it did not touch stay. A file a `nika:edit` changed stays in place,
+   edited, with its original under `.nika/quarantine/<trace>/originals/`.
+   A failure an `on_error:` absorbs leaves the run green and moves
+   nothing. Measured on 0.125.0. Hint `assert-quarantine`.
 8. **`--resume` on a `for_each` infer whose prompt uses `item.field`
    now cache-hits** when the collection and definition are unchanged.
    The skip is the *whole fan*, not one item.

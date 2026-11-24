@@ -1,0 +1,23 @@
+[
+  {"run_id": "run-0001", "workflow": "weekly-digest", "started_at": "2026-11-17T06:00:00Z", "status": "success", "cost_usd": 0.8, "duration_ms": 202000},
+  {"run_id": "run-0002", "workflow": "nightly-export", "started_at": "2026-11-21T02:00:00Z", "status": "success", "cost_usd": 0.31, "duration_ms": 128000},
+  {"run_id": "run-0003", "workflow": "crm-backup", "started_at": "2026-11-21T03:00:00Z", "status": "success", "cost_usd": 0.02, "duration_ms": 15100},
+  {"run_id": "run-0004", "workflow": "nightly-export", "started_at": "2026-11-22T02:00:00Z", "status": "success", "cost_usd": 0.29, "duration_ms": 121500},
+  {"run_id": "run-0005", "workflow": "crm-backup", "started_at": "2026-11-22T03:00:00Z", "status": "success", "cost_usd": 0.02, "duration_ms": 14800},
+  {"run_id": "run-0006", "workflow": "nightly-export", "started_at": "2026-11-23T02:00:00Z", "status": "success", "cost_usd": 0.3, "duration_ms": 125300},
+  {"run_id": "run-0007", "workflow": "crm-backup", "started_at": "2026-11-23T03:00:00Z", "status": "success", "cost_usd": 0.03, "duration_ms": 15600},
+  {"run_id": "run-0008", "workflow": "lead-enrichment", "started_at": "2026-11-23T17:00:00Z", "status": "success", "cost_usd": 0.4, "duration_ms": 88000},
+  {"run_id": "run-0009", "workflow": "invoice-sync", "started_at": "2026-11-23T18:30:00Z", "status": "success", "cost_usd": 0.05, "duration_ms": 41200},
+  {"run_id": "run-0010", "workflow": "lead-enrichment", "started_at": "2026-11-23T20:00:00Z", "status": "success", "cost_usd": 0.42, "duration_ms": 91200},
+  {"run_id": "run-0011", "workflow": "invoice-sync", "started_at": "2026-11-23T20:30:00Z", "status": "success", "cost_usd": 0.04, "duration_ms": 39800},
+  {"run_id": "run-0012", "workflow": "invoice-sync", "started_at": "2026-11-23T22:30:00Z", "status": "success", "cost_usd": 0.05, "duration_ms": 40500},
+  {"run_id": "run-0013", "workflow": "lead-enrichment", "started_at": "2026-11-23T23:00:00Z", "status": "success", "cost_usd": 0.38, "duration_ms": 86400},
+  {"run_id": "run-0014", "workflow": "invoice-sync", "started_at": "2026-11-24T00:30:00Z", "status": "success", "cost_usd": 0.05, "duration_ms": 42100},
+  {"run_id": "run-0015", "workflow": "lead-enrichment", "started_at": "2026-11-24T02:00:00Z", "status": "failed", "cost_usd": 0.05, "duration_ms": 6100},
+  {"run_id": "run-0016", "workflow": "invoice-sync", "started_at": "2026-11-24T02:30:00Z", "status": "success", "cost_usd": 0.06, "duration_ms": 44900},
+  {"run_id": "run-0017", "workflow": "crm-backup", "started_at": "2026-11-24T03:00:00Z", "status": "success", "cost_usd": 0.31, "duration_ms": 151000},
+  {"run_id": "run-0018", "workflow": "invoice-sync", "started_at": "2026-11-24T04:30:00Z", "status": "success", "cost_usd": 0.05, "duration_ms": 40100},
+  {"run_id": "run-0019", "workflow": "lead-enrichment", "started_at": "2026-11-24T05:00:00Z", "status": "failed", "cost_usd": 0.04, "duration_ms": 5900},
+  {"run_id": "run-0020", "workflow": "weekly-digest", "started_at": "2026-11-24T06:00:00Z", "status": "success", "cost_usd": 0.85, "duration_ms": 207500},
+  {"run_id": "run-0021", "workflow": "invoice-sync", "started_at": "2026-11-24T06:30:00Z", "status": "success", "cost_usd": 0.92, "duration_ms": 312400}
+]
