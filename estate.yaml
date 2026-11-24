@@ -272,7 +272,7 @@ patterns:
 - glob: "conformance/tests/**"
   class: authored
   match_count: 1418
-  aggregate_sha256: b32c736162efa943f4931b1241117baadf5bcc58a9b9f86b6bc1d9f34b8e973d
+  aggregate_sha256: 33f89cd286a1d0ece53408f362c79207deb09156e6ee5fa1eaf67b08378e46ba
   evidence: "the executable law — the 5-tier fixture corpus (core · deep 001-022 · lints · runtime · stdlib): input + expected pairs written at spec-authoring time, consumed by conformance/runner.py; no generation markers"
 - glob: "conformance/.nika/**"
   class: testimonial
