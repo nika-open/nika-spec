@@ -8628,13 +8628,17 @@ that as well, or the person grants it through a command dedicated to
 it. An engine MUST NOT create a record by default, from a policy, from
 a `default:` on the gate, or at the request of an agent. An explicit
 refusal always wins over any record: the gate settles `false`
-· (b) **two hashes** — the record binds the content hash the ticket
-binds (1) and a **world hash** over the run's world: the workflow and
-every child workflow it calls · the skills it loads · its `permits:`
-block · the values of its inputs · the pin of each MCP server it calls
-· the resolved model of each task · an inventory of the files it
-reads, with a checksum each. Any difference in either hash means the
-record does not apply and the gate re-prompts
+· (b) **one step, two hashes** — the record binds the step it was
+granted at, the content hash that step's ticket binds (1), and a
+**world hash** over the run's world: the workflow and every child
+workflow it calls, at any depth, each by at least its semantic hash
+([15](./15-proof.md)) — an engine MAY bind more (the source bytes),
+never less · the skills it loads · its `permits:` block · the
+resolved value of each input, a default included · the pin of each
+MCP server it calls · the resolved model of each task · an inventory
+of the files it reads, with a checksum each, where a file added or
+removed is a difference. Any difference in the step or in either hash
+means the record does not apply and the gate re-prompts
 · (c) **what it cannot bind, said in the record** — content fetched
 from the network · what an MCP tool returns · the programs an `exec:`
 task launches · environment values. The files the workflow itself
@@ -8643,18 +8647,17 @@ and join that list. The record MUST carry the list as **not covered**,
 and a reader of the record MUST be able to see it
 · (d) **expiring** — every record carries an expiry, 31 days by
 default. The person MAY remove it, except where the workflow's
-`permits:` let it send data out: there the expiry MUST NOT be removed.
-An expired record does not apply and the gate re-prompts
+`permits:` let it send data out or launch programs: there the expiry
+MUST NOT be removed, because what a launched program does is not
+bound by the record. An expired record does not apply and the gate
+re-prompts
 · (e) **`permits:` required** — a workflow with no `permits:` block
 MUST NOT receive a record. The record names the **effect level** it
 lets through, one of *reads only* · *writes inside the project* ·
-*sends out* · *launches programs* · *spends*, in that ascending
-order: the highest its `permits:` block allows, computed from that
-block alone (`fs.read` · `fs.write` · `net` · `exec` reach the first
-four). What the block does not settle — a write glob that leaves the
-project · an `mcp:` tool grant · *spends*, which no category of
-`permits:` carries — is **OWED**, and left undecided rather than
-invented. A record never widens `permits:`
+*sends out* · *launches programs*, in that ascending order: the
+highest its `permits:` block allows, computed from that block alone.
+It states its cost ceiling (f) beside the level. A record never widens
+`permits:`
 · (f) **a cost ceiling per run** — the record carries a cost ceiling,
 and every run it lets through is capped at it (the run's cost cap ·
 [13](./13-outcomes.md) · cause `budget`); it never raises a cap the
@@ -8662,28 +8665,31 @@ run was given. The ceiling is per run, never cumulative across runs
 · (g) **this operator, this project** — the record binds the operator
 who granted it and the project it was granted in. It is kept twice,
 one copy with the project and one by the operator, and it applies only
-where the two agree. A copy of the project carries no authority
+where the two agree in every field. A copy of the project carries no
+authority
 · (h) **trifecta gates** — a gate the lethal-trifecta law requires
 ([§The credited gate](#the-credited-gate-normative)) MAY receive a
 record under (a) to (g). Where the workflow sends out, the expiry of
 (d) stays, and at grant time the engine MUST show, in a plain
 sentence, that later runs will send without anyone looking
-· (i) **attested** — every gate passed on a record emits a
-hash-chained `consent_reused` event of its own, beside
-`approval_decided`: the record's digest · the shown hash · the world
-hash · the record's remaining time · the effect level. No attestation
-shows the reuse as a fresh decision: where one names the decision's
-source, the source is `standing`. The receipt names the reuse, so a
-reader tells a reused decision from a fresh one
+· (i) **attested** — two event kinds are the attestation of a gate
+passed on a record: the `approval_decided` of the ticket the run
+minted (4), its decision's source named `standing`, and beside it a
+hash-chained `consent_reused` event of its own (the record's digest ·
+the shown hash · the world hash · the record's remaining time · the
+effect level). No attestation shows the reuse as a fresh decision.
+The receipt names the reuse, so a reader tells a reused decision from
+a fresh one
 · (j) **revocable** — at any time, for the runs that follow; never
-retroactive: a revocation rewrites no receipt.
+retroactive: a revocation rewrites no receipt. The operator's copy
+carries the revocation: restoring the project's copy restores nothing.
 
 **What standing consent does not claim** · it does not prove that the
 party who granted a record was a person rather than a process acting
 as the same operating-system user. It does not judge the content (c)
 names: a later run acts on what it fetches, on what a tool returns, on
-what a program does and on what the environment holds, with nobody
-looking.
+what a program does, on what the environment holds and on the state
+it rewrote, with nobody looking.
 
 **Reference-engine storage note (nonnormative)** · the reference engine
 records approval claims in an operator store and in a store bound to the
@@ -9073,6 +9079,10 @@ to give.
   it, and `nika check` neither reads nor judges a record. It is not the
   delegation the line above defers: it lets through the operator who
   granted it, in the project where it was granted, and nobody else.
+- **No trace kind minted here.** This chapter names `approval_decided`
+  and `consent_reused` as attestations. The closed kind vocabulary of
+  [17](./17-trace.md) names neither yet: it gains both when a reference
+  engine emits them.
 - **No law inheritance.** A file's law is the file's — composition
   across `invoke: { workflow: <path> }` calls judges the callee by the same
   unconditional laws (the ceiling algebra is reserved, unwired).
