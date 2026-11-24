@@ -1,0 +1,107 @@
+# Rehearsal stand-ins for examples/seo-site-audit.nika · an invented pottery shop.
+# `sitemap` mirrors a `mode: sitemap` fetch, `pages` the raw HTML each URL would
+# serve (seeded with defects), `baseline` the audit a month earlier.
+sitemap:
+  - { loc: "https://shop.example.net/", lastmod: "2026-11-20" }
+  - { loc: "https://shop.example.net/collections/mugs", lastmod: "2026-11-18" }
+  - { loc: "https://shop.example.net/collections/bowls", lastmod: "2026-11-02" }
+  - { loc: "https://shop.example.net/blog/glaze-care", lastmod: "2026-10-30" }
+  - { loc: "https://shop.example.net/blog/glaze-care-2019", lastmod: "2026-11-21" }
+  - { loc: "https://shop.example.net/about", lastmod: "2026-09-12" }
+
+pages:
+  # Clean.
+  "https://shop.example.net/": |
+    <!doctype html>
+    <html lang="en"><head>
+    <title>Handmade stoneware for everyday tables</title>
+    <meta name="description" content="Mugs, bowls and plates thrown by hand in a small studio, glazed in small batches and shipped in recycled packaging.">
+    <link rel="canonical" href="https://shop.example.net/">
+    <link rel="alternate" hreflang="en" href="https://shop.example.net/">
+    <link rel="alternate" hreflang="fr" href="https://shop.example.net/fr/">
+    <link rel="alternate" hreflang="x-default" href="https://shop.example.net/">
+    </head><body>
+    <h1>Stoneware for every day</h1>
+    <img src="/img/hero.jpg" alt="Three glazed mugs on a wooden table">
+    </body></html>
+
+  # Title too long, no meta description, one image without alt.
+  "https://shop.example.net/collections/mugs": |
+    <!doctype html>
+    <html lang="en"><head>
+    <title>Stoneware mugs, espresso cups, travel tumblers and gift sets for every kitchen</title>
+    <link rel="canonical" href="https://shop.example.net/collections/mugs">
+    </head><body>
+    <h1>Mugs</h1>
+    <img src="/img/mug-blue.jpg">
+    <img src="/img/mug-sand.jpg" alt="A sand-coloured mug with a speckled glaze">
+    </body></html>
+
+  # Two h1, no canonical, hreflang without x-default. The title opens with `+`,
+  # which a spreadsheet reads as a formula: fixes.csv guards it.
+  "https://shop.example.net/collections/bowls": |
+    <!doctype html>
+    <html lang="en"><head>
+    <title>+40 bowl shapes, glazed by hand</title>
+    <meta content="Ramen bowls, cereal bowls and serving bowls in eight glazes, each one thrown and trimmed by hand in the studio." name="description">
+    <link rel="alternate" hreflang="en" href="https://shop.example.net/collections/bowls">
+    <link rel="alternate" hreflang="fr" href="https://shop.example.net/fr/collections/bowls">
+    </head><body>
+    <h1>Bowls</h1>
+    <h1 class="promo">Free shipping this week</h1>
+    <img src="/img/bowls.jpg" alt="A stack of four bowls in a blue glaze">
+    </body></html>
+
+  # Shares its title with the 2019 post, meta description too short.
+  "https://shop.example.net/blog/glaze-care": |
+    <!doctype html>
+    <html lang="en"><head>
+    <title>How to care for glazed stoneware</title>
+    <meta name="description" content="Care tips.">
+    <link rel="canonical" href="https://shop.example.net/blog/glaze-care">
+    </head><body>
+    <h1>How to care for glazed stoneware</h1>
+    </body></html>
+
+  # Same title, and noindex while the sitemap still lists it.
+  "https://shop.example.net/blog/glaze-care-2019": |
+    <!doctype html>
+    <html lang="en"><head>
+    <title>How to care for glazed stoneware</title>
+    <meta name="robots" content="noindex, follow">
+    <meta name="description" content="Our first guide to washing, stacking and storing stoneware, kept online for the readers who bookmarked it.">
+    <link rel="canonical" href="https://shop.example.net/blog/glaze-care">
+    </head><body>
+    <h1>Caring for stoneware (2019)</h1>
+    </body></html>
+
+  # Clean (its missing h1 was fixed since the baseline).
+  "https://shop.example.net/about": |
+    <!doctype html>
+    <html lang="en"><head>
+    <title>About the studio and the people behind the wheel</title>
+    <meta name="description" content="Two potters, one kiln and a shared workshop: how the studio started and how every piece is made.">
+    <link rel="canonical" href="https://shop.example.net/about">
+    </head><body>
+    <h1>About the studio</h1>
+    <img src="/img/kiln.jpg" alt="The studio kiln with its door open">
+    </body></html>
+
+# The previous audit, in the shape the workflow writes to
+# out/seo-site-audit/audit-state.json. Read only when that file does not exist.
+baseline:
+  day: "2026-10-24"
+  issues:
+    "https://shop.example.net/": {}
+    "https://shop.example.net/collections/mugs": { img-alt-missing: true }
+    "https://shop.example.net/collections/bowls": { h1-several: true, canonical-missing: true, hreflang-no-x-default: true }
+    "https://shop.example.net/blog/glaze-care": { meta-length: true }
+    "https://shop.example.net/about": { h1-missing: true }
+    "https://shop.example.net/sale": { noindex-in-sitemap: true }
+  scores:
+    "https://shop.example.net/": 100
+    "https://shop.example.net/collections/mugs": 95
+    "https://shop.example.net/collections/bowls": 75
+    "https://shop.example.net/blog/glaze-care": 95
+    "https://shop.example.net/about": 85
+    "https://shop.example.net/sale": 80

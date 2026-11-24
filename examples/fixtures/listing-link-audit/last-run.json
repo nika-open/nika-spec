@@ -1,0 +1,73 @@
+{
+  "listings": {
+    "apps-directory": {
+      "name": "Apps directory",
+      "url": "https://apps.example.com/listing/product",
+      "verdict": "needs work",
+      "score": 88,
+      "missing": [
+        "changelog"
+      ],
+      "images": 4,
+      "undersized": 0,
+      "page_hash": "048ad515ee7a3ab3bff1dd1cccf92dd2f9c0c81fa7a9d2c15e0ff89260ce7c03"
+    },
+    "tools-directory": {
+      "name": "Tools directory",
+      "url": "https://directory.example.org/tools/product",
+      "verdict": "needs work",
+      "score": 88,
+      "missing": [
+        "changelog"
+      ],
+      "images": 3,
+      "undersized": 0,
+      "page_hash": "81b26ea9b478114af4ee8fca71aac61e41e2ab113a90b38557f5be71d2458373"
+    },
+    "marketplace": {
+      "name": "Marketplace",
+      "url": "https://market.example.net/p/product",
+      "verdict": "healthy",
+      "score": 100,
+      "missing": [],
+      "images": 3,
+      "undersized": 0,
+      "page_hash": "db5f6b033ce726b07d6a7ca57e8741fae71138a43504a2f1da1adb8d405d82e5"
+    },
+    "package-registry": {
+      "images": 5,
+      "missing": [
+        "docs"
+      ],
+      "name": "Package registry",
+      "page_hash": "0c0186e2e876412252e3d293048049708506330f680bd63b2c5f60531d8c26b1",
+      "score": 88,
+      "undersized": 0,
+      "url": "https://registry.example.org/packages/product",
+      "verdict": "needs work"
+    },
+    "software-catalog": {
+      "name": "Software catalog",
+      "url": "https://catalog.example.com/item/4821",
+      "verdict": "healthy",
+      "score": 100,
+      "missing": [],
+      "images": 4,
+      "undersized": 0,
+      "page_hash": "0f1317fdc49106e5d9cbf498c831a03bc4f9830a91f8467a43e5adaa4363f12c"
+    },
+    "legacy-portal": {
+      "name": "Legacy portal",
+      "url": "https://portal.example.net/apps/product",
+      "verdict": "needs work",
+      "score": 76,
+      "missing": [
+        "pricing",
+        "changelog"
+      ],
+      "images": 3,
+      "undersized": 0,
+      "page_hash": "41cf90e6216dc73b1489af683f74d3f9dfd6ad53a47b27cbce8e4b46bbc37105"
+    }
+  }
+}

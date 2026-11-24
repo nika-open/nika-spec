@@ -1,0 +1,12 @@
+QUAYSIDE TAXI
+Cab 27 · driver ref 4410
+
+Receipt QT-7781
+14.10.2026  18:40
+From: Station Road
+To:   Harbour Yard
+
+Fare      EUR 16.50
+Tip       EUR  1.50
+
+[the bottom of this receipt is torn off]

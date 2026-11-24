@@ -1,0 +1,7 @@
+{
+  "flakes": [
+    { "test": "search::suggest_debounce", "at": "2026-10-28T11:03:52Z", "log": "pipeline-1977-e2e-shard3.log" },
+    { "test": "checkout::payment_redirect", "at": "2026-11-18T09:41:07Z", "log": "pipeline-2163-e2e-shard2.log" },
+    { "test": "checkout::payment_redirect", "at": "2026-11-21T15:12:44Z", "log": "pipeline-2190-e2e-shard1.log" }
+  ]
+}

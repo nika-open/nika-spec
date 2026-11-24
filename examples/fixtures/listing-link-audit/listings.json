@@ -1,0 +1,57 @@
+{
+  "required_links": [
+    {
+      "label": "home",
+      "href": "https://product.example.com/"
+    },
+    {
+      "label": "docs",
+      "href": "https://product.example.com/docs"
+    },
+    {
+      "label": "pricing",
+      "href": "https://product.example.com/pricing"
+    },
+    {
+      "label": "changelog",
+      "href": "https://product.example.com/changelog"
+    },
+    {
+      "label": "source",
+      "href": "https://code.example.org/product/product"
+    }
+  ],
+  "min_images": 3,
+  "min_image_width": 1000,
+  "listings": [
+    {
+      "id": "apps-directory",
+      "name": "Apps directory",
+      "url": "https://apps.example.com/listing/product",
+      "rehearsal_html": "<html><head><title>The product · Apps directory</title></head><body><h1>The product · Apps directory</h1><nav><a href='https://product.example.com/?utm_source=apps-directory'>Website</a><a href='https://product.example.com/docs'>Docs</a><a href='https://product.example.com/pricing'>Pricing</a><a href='https://product.example.com/changelog'>Changelog</a><a href='https://code.example.org/product/product'>Source</a><a href='/report'>Report this listing</a></nav><section class='gallery'><img src='https://cdn.example.net/shots/1.png' alt='screenshot 1' width='1280' height='800'><img src='https://cdn.example.net/shots/2.png' alt='screenshot 2' width='1280' height='800'><img src='https://cdn.example.net/shots/3.png' alt='screenshot 3' width='1280' height='800'><img src='https://cdn.example.net/shots/4.png' alt='screenshot 4' width='1280' height='800'></section></body></html>"
+    },
+    {
+      "id": "tools-directory",
+      "name": "Tools directory",
+      "url": "https://directory.example.org/tools/product",
+      "rehearsal_html": "<html><head><title>The product · Tools directory</title></head><body><h1>The product · Tools directory</h1><nav><a href='https://product.example.com'>Visit site</a><a href='https://product.example.com/docs'>Documentation</a><a href='https://code.example.org/product/product'>Source code</a></nav><section class='gallery'><img src='https://cdn.example.net/shots/1.png' alt='screenshot 1' width='640' height='400'><img src='https://cdn.example.net/shots/2.png' alt='screenshot 2'></section></body></html>"
+    },
+    {
+      "id": "marketplace",
+      "name": "Marketplace",
+      "url": "https://market.example.net/p/product",
+      "rehearsal_html": "<html><head><title>The product · Marketplace</title></head><body><h1>The product · Marketplace</h1><nav><a href='https://product.example.com/'>Home</a><a href='https://product.example.com/docs/?ref=market'>Docs</a><a href='https://product.example.com/pricing/'>Pricing</a><a href='https://product.example.com/changelog#latest'>What's new</a><a href='https://code.example.org/product/product/'>Code</a></nav><section class='gallery'><img src='https://cdn.example.net/shots/1.png' alt='screenshot 1' width='1440' height='900'><img src='https://cdn.example.net/shots/2.png' alt='screenshot 2' width='1440' height='900'><img src='https://cdn.example.net/shots/3.png' alt='screenshot 3' width='320' height='200'></section></body></html>"
+    },
+    {
+      "id": "package-registry",
+      "name": "Package registry",
+      "url": "https://registry.example.org/packages/product",
+      "rehearsal_html": "<html><head><title>@example/product · Package registry</title></head><body><h1>@example/product · Package registry</h1><nav><a href='https://product.example.com'>Homepage</a><a href='https://product.example.com/documentation'>Documentation</a><a href='https://product.example.com/pricing'>Pricing</a><a href='https://product.example.com/changelog'>Changelog</a><a href='https://code.example.org/product/product'>Repository</a></nav><section class='gallery'><img src='https://cdn.example.net/shots/1.png' alt='screenshot 1'><img src='https://cdn.example.net/shots/2.png' alt='screenshot 2'><img src='https://cdn.example.net/shots/3.png' alt='screenshot 3'><img src='https://cdn.example.net/shots/4.png' alt='screenshot 4'><img src='https://cdn.example.net/shots/5.png' alt='screenshot 5'></section></body></html>"
+    },
+    {
+      "id": "software-catalog",
+      "name": "Software catalog",
+      "url": "https://catalog.example.com/item/4821"
+    }
+  ]
+}

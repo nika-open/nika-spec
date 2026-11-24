@@ -1,0 +1,712 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · creative / local image generation
+#
+# A brief becomes a few renders on your own machine · the model turns a
+# one-line brief into a positive prompt, a negative prompt and seeds; each
+# seed is queued on a local ComfyUI server as an API-format graph built as
+# a value; each render is collected from disk, finished with a fixed grade
+# and laid out on a contact sheet; a provenance manifest says where every
+# frame came from. With no server running, the run stays green and says so:
+# each seed the server did not render is stood in for by a labelled mock
+# image, never passed off as a render.
+#
+# Demonstrates ·
+#   - phases · gate → gather → normalize → judge → act → report, 24 tasks,
+#     three branches (`poll` only when a job was queued, `stand_in` only
+#     when a seed is missing, `save_manifest` only on a valid manifest) and
+#     the joins `split`, `frames`, `report`
+#   - the graph as a VALUE · seven nodes built in `nika:jq`, one per seed,
+#     never pasted text · seeds de-duplicated and padded by the same law
+#     that the one `nika:assert` proves on a hand-computed case
+#   - a compute budget asserted before the first POST (renders × steps), a
+#     cost check instead of a second gate
+#   - polling ComfyUI's history with `retry.on_codes: [NIKA-BUILTIN-JQ-001]`
+#     (a jq `error()` while a render is pending, spec 08 H19) · a refused
+#     connection is not retried, so a run with no server waits for nothing
+#   - `nika:validate` on the server's receipts before a prompt id enters a
+#     URL, and on the manifest before it is written
+#   - `nika:image_generate` (provider mock) for the stand-ins,
+#     `nika:image_fx` for the grade, `nika:image_compose` for the sheet
+#   - `nika:inspect` · the slowest steps charted with `nika:chart`, the run's
+#     cost folded into run-report.json, written whatever the renders did
+#
+# Needs · optionally, ComfyUI listening on 127.0.0.1:8188, started with its
+#   output directory at out/comfyui-image-chain/renders inside this checkout
+#   (its `--output-directory` flag, not exercised here) and a checkpoint
+#   file named like `const.graph.checkpoint` in its checkpoints folder.
+#   `nika:fetch` refuses a binary body, so renders are read from that
+#   folder, not from `/view`. Rehearsed against a throwaway local server
+#   that answers POST /prompt and GET /history/<id> and saves files the way
+#   SaveImage names them, not against ComfyUI itself.
+#   Another route to pictures, not used here · an agent application seat
+#   (`run.access: { via: codex, protocol: acp }`) with
+#   `agent: { images: { save: … } }`, spec 02-verbs §Harness images.
+#
+# Run · nika run examples/comfyui-image-chain.nika --model mock/echo --answer approve=true
+#   Without `--answer` it PAUSES at `approve` (exit 4 · durable, not an
+#   error); `approve=false` lands nothing and exits 0. With no server,
+#   mock/echo yields one seed, the law pads it to three, all three POSTs
+#   are refused at once, and the sheet holds three labelled mock frames.
+
+nika: comfyui-image-chain
+
+model: ollama/qwen3.5:4b   # local · zero key · writes the prompts, never the pixels
+
+run:
+  clock: system            # `queue` and `poll` declare a `timeout:` · name the clock they ride
+
+inputs:
+  brief:
+    type: string
+    default: "a lighthouse on a basalt cliff at blue hour, long exposure, calm sea"
+    description: "What to picture, in one line"
+  variants:
+    type: integer
+    default: 3
+    description: "Renders to queue · the budget below refuses more than 4"
+
+const:
+  server: "http://127.0.0.1:8188"
+  renders_dir: "out/comfyui-image-chain/renders"
+  # The sampler settings every graph carries. `checkpoint` is the file name
+  # of a model in your ComfyUI checkpoints folder: replace it with yours.
+  graph:
+    checkpoint: "your-checkpoint.safetensors"
+    width: 768
+    height: 768
+    steps: 24
+    cfg: 6.5
+    sampler: euler
+    scheduler: normal
+  seed_base: 1009            # padding seeds are 1009, 8928, 16847, … (step 7919)
+  # The compute budget, checked before the first POST.
+  max_renders: 4
+  max_total_steps: 120       # renders × steps
+  finish_seed: 7             # the grain's seed · the same seed, the same bytes
+  receipts_schema:
+    type: array
+    items:
+      type: object
+      required: [seed, prefix, prompt_id]
+      properties:
+        seed: { type: integer, minimum: 0 }
+        prefix: { type: string, pattern: "^[0-9a-f-]{36}/seed-[0-9]+$" }
+        prompt_id: { type: string, pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  manifest_schema:
+    type: object
+    required: [manifest_version, run_id, prompts, frames, stand_ins]
+    properties:
+      manifest_version: { const: 1 }
+      run_id: { type: string, minLength: 36, maxLength: 36 }
+      prompts:
+        type: object
+        required: [positive, negative]
+        properties:
+          positive: { type: string, minLength: 1, maxLength: 400 }
+          negative: { type: string, maxLength: 200 }
+      frames:
+        type: array
+        maxItems: 4
+        items:
+          type: object
+          required: [seed, source, final, final_sha256]
+          properties:
+            source: { enum: [comfyui, stand-in] }
+            final_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+      stand_ins: { type: integer, minimum: 0 }
+  # The plan law, proven on a case computed by hand: a duplicated seed, a
+  # negative one, a seed equal to the first padding seed, a line break in
+  # the prompt.
+  law_case:
+    run_id: "case"
+    variants: 3
+    enhanced: { positive: "a lighthouse\nat dusk", negative: "blur", seeds: [5, 5, 1009, -3] }
+  law_want:
+    positive: "a lighthouse at dusk"
+    seeds: [5, 1009, 8928]
+    prefixes: ["case/seed-5", "case/seed-1009", "case/seed-8928"]
+    nodes: ["3", "4", "5", "6", "7", "8", "9"]
+
+permits:
+  tools: ["nika:assert", "nika:chart", "nika:fetch", "nika:glob", "nika:image_compose", "nika:image_fx",
+          "nika:image_generate", "nika:inspect", "nika:jq", "nika:prompt", "nika:uuid", "nika:validate", "nika:write"]
+  net:
+    http: ["127.0.0.1"]       # the local server only · the port rides the URL
+  fs:
+    read:
+      # `nika:glob` gates its walk root, each image builtin gates its files.
+      - "out/comfyui-image-chain/renders"
+      - "out/comfyui-image-chain/renders/**"
+      - "out/comfyui-image-chain/stand-ins/*"
+      - "out/comfyui-image-chain/final/*"
+    write:
+      # `nika:image_generate` gates its `output_dir:` AND each file it saves.
+      - "out/comfyui-image-chain/stand-ins"
+      - "out/comfyui-image-chain/stand-ins/*"
+      - "out/comfyui-image-chain/final/*"
+      - "out/comfyui-image-chain/contact-sheet.png"
+      - "out/comfyui-image-chain/manifest.json"
+      - "out/comfyui-image-chain/run-report.json"
+      - "out/comfyui-image-chain/timing.svg"
+
+tasks:
+  # ═══ GATE · the one human decision, before any POST ══════════════════
+  # The checker counts this boundary as all three legs of the lethal
+  # trifecta: a local read (the renders folder), untrusted ingress (the
+  # server's answers) and egress (a POST, even to 127.0.0.1). Measured:
+  # without a gate that dominates every effect, `check` refuses the file
+  # (NIKA-SEC-009), and a gate placed later is bypassed by the data edges.
+  # So the person confirms the run once, up front; nothing here leaves the
+  # machine. Blocking: no `default:` · a defaulted prompt dominates nothing.
+  approve:
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: confirm
+        message: |
+          This image run will:
+            · write prompts from the brief with the model (one call)
+            · queue at most 4 renders on the local server at 127.0.0.1:8188
+            · stand in a labelled mock image for each seed it does not render
+            · rewrite out/comfyui-image-chain/ (frames, sheet, manifest, report)
+          Proceed?
+
+  # ═══ GATHER ═══════════════════════════════════════════════════════════
+  run_id:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:uuid"
+      args: { version: v7 }                 # time-ordered · names this run's renders folder
+
+  enhance:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    infer:
+      # a reasoning model needs 16384 here, or a documented run.reasoning.effort: low
+      max_tokens: 400                       # one call per run
+      system: |
+        You write prompts for a diffusion image model. Keep the subject of
+        the brief, add concrete light, lens and composition words, and put
+        what to avoid in the negative prompt. Propose distinct seeds.
+      prompt: |
+        Brief · ${{ inputs.brief }}
+        Seeds wanted · ${{ inputs.variants }}
+      schema:
+        type: object
+        additionalProperties: false
+        required: [positive, negative, seeds]
+        properties:
+          positive: { type: string, minLength: 1, maxLength: 400 }
+          negative: { type: string, maxLength: 200 }
+          seeds:
+            type: array
+            minItems: 1
+            maxItems: 4
+            items: { type: integer, minimum: 0, maximum: 4294967295 }
+
+  # ═══ NORMALIZE ════════════════════════════════════════════════════════
+  # The plan law · ONE program applied twice, to this run's prompts and to
+  # the hand-computed `const.law_case`. Prompts lose their line breaks and
+  # are capped; seeds are de-duplicated, kept in range and padded from
+  # `seed_base` up to `variants`; each seed gets its graph, the default
+  # ComfyUI text-to-image chain, with a SaveImage prefix `<run>/seed-<n>`.
+  plan:
+    with:
+      go: ${{ tasks.approve.output }}
+      enhanced: ${{ tasks.enhance.output }}
+      run_id: ${{ tasks.run_id.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          graph: ${{ const.graph }}
+          base: ${{ const.seed_base }}
+          run: { run_id: "${{ with.run_id }}", variants: "${{ inputs.variants }}", enhanced: "${{ with.enhanced }}" }
+          case: ${{ const.law_case }}
+        expression: >-
+          .graph as $g | .base as $base
+          | def clean($max): gsub("[\\r\\n\\t]+"; " ") | gsub(" +"; " ") | ltrimstr(" ") | rtrimstr(" ") | .[:$max];
+            def law:
+              .variants as $n | .run_id as $rid
+              | ((.enhanced.positive // "") | clean(400)) as $pos
+              | ((.enhanced.negative // "") | clean(200)) as $neg
+              | ((.enhanced.seeds // []) | map(select(type == "number" and . >= 0 and . <= 4294967295) | floor) | unique) as $given
+              | ([range(0; $n)] | map($base + . * 7919) | map(select(. as $s | $given | index([$s]) == null))) as $pad
+              | { positive: $pos, negative: $neg,
+                  jobs: (($given + $pad)[:$n]
+                         | map(. as $seed
+                               | ($rid + "/seed-" + ($seed | tostring)) as $prefix
+                               | { seed: $seed, prefix: $prefix,
+                                   graph: { "3": { class_type: "KSampler",
+                                                   inputs: { seed: $seed, steps: $g.steps, cfg: $g.cfg,
+                                                             sampler_name: $g.sampler, scheduler: $g.scheduler, denoise: 1,
+                                                             model: ["4", 0], positive: ["6", 0], negative: ["7", 0],
+                                                             latent_image: ["5", 0] } },
+                                            "4": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: $g.checkpoint } },
+                                            "5": { class_type: "EmptyLatentImage",
+                                                   inputs: { width: $g.width, height: $g.height, batch_size: 1 } },
+                                            "6": { class_type: "CLIPTextEncode", inputs: { text: $pos, clip: ["4", 1] } },
+                                            "7": { class_type: "CLIPTextEncode", inputs: { text: $neg, clip: ["4", 1] } },
+                                            "8": { class_type: "VAEDecode", inputs: { samples: ["3", 0], vae: ["4", 2] } },
+                                            "9": { class_type: "SaveImage",
+                                                   inputs: { filename_prefix: $prefix, images: ["8", 0] } } } })) };
+          { result: (.run | law), proof: (.case | law) }
+
+  # ═══ JUDGE ════════════════════════════════════════════════════════════
+  invariants:
+    with:
+      go: ${{ tasks.approve.output }}
+      plan: ${{ tasks.plan.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          proof: "${{ with.plan.proof }}"
+          want: ${{ const.law_want }}
+          jobs: "${{ with.plan.result.jobs }}"
+          positive: "${{ with.plan.result.positive }}"
+          steps: ${{ const.graph.steps }}
+          max_renders: ${{ const.max_renders }}
+          max_total_steps: ${{ const.max_total_steps }}
+        expression: >-
+          { law: ((.proof | { positive, seeds: (.jobs | map(.seed)), prefixes: (.jobs | map(.prefix)),
+                              nodes: (.jobs[0].graph | keys) }) == .want),
+            budget: ((.jobs | length) <= .max_renders and ((.jobs | length) * .steps) <= .max_total_steps),
+            prompt: ((.positive | length) > 0) }
+          | . + { all: (.law and .budget and .prompt) }
+
+  # Every POST waits on this assert. A red verdict stops the run before the
+  # first job is queued: nothing is sent or written, the verdict is in the
+  # trace and the run exits 1. `check` prints one advisory
+  # [assert-quarantine] hint for this task: it fires on any file that both
+  # asserts and writes, and dropping the assert would trade it for the
+  # paid-run [unproven-law] hint.
+  law_holds:
+    with:
+      go: ${{ tasks.approve.output }}
+      verdict: ${{ tasks.invariants.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:assert"
+      args:
+        condition: "${{ with.verdict.all }}"
+        message: "an invariant failed (plan law · compute budget · empty prompt) · nothing was queued"
+
+  # ═══ ACT ══════════════════════════════════════════════════════════════
+  # One POST per seed, one at a time (the server renders in order anyway).
+  # No `retry:` · a POST without an idempotency key must not repeat, and a
+  # repeated job would render twice. A refused connection or a refused
+  # graph recovers to `null`: that seed is stood in for below.
+  queue:
+    after: { law_holds: success }
+    with:
+      go: ${{ tasks.approve.output }}
+      plan: ${{ tasks.plan.output }}
+      run_id: ${{ tasks.run_id.output }}
+    when: ${{ with.go == true }}
+    for_each:
+      items: ${{ with.plan.result.jobs }}
+      max_parallel: 1
+      fail_fast: false
+    timeout: "15s"
+    invoke:
+      tool: "nika:fetch"
+      args:
+        url: "${{ const.server }}/prompt"
+        method: POST
+        body: { prompt: "${{ item.graph }}", client_id: "${{ with.run_id }}" }
+        mode: jq
+        jq: '{ prompt_id, number }'
+    on_error:
+      recover: null
+
+  # A for_each output is in ITEM ORDER, so `transpose` pairs each job with
+  # its receipt.
+  receipts:
+    with:
+      go: ${{ tasks.approve.output }}
+      plan: ${{ tasks.plan.output }}
+      queue: ${{ tasks.queue.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { jobs: "${{ with.plan.result.jobs }}", queue: "${{ with.queue }}" }
+        expression: >-
+          [.jobs, (.queue // [])] | transpose
+          | map(select(.[0] != null) | { seed: .[0].seed, prefix: .[0].prefix, prompt_id: (.[1].prompt_id // null) })
+          | { queued: map(select(.prompt_id != null)), refused: map(select(.prompt_id == null)) }
+
+  receipts_ok:
+    with:
+      go: ${{ tasks.approve.output }}
+      receipts: ${{ tasks.receipts.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.receipts.queued }}"
+        schema: ${{ const.receipts_schema }}
+
+  # Each queued job's history entry is empty until its render is done; the
+  # jq `error()` then fails the attempt with NIKA-BUILTIN-JQ-001, which is
+  # the only code the retry repeats: up to 120 polls, 1.5 s apart, about
+  # three minutes per render. Raise `max_attempts` for a slow machine. A
+  # job that never finishes recovers to `null` and is stood in for.
+  poll:
+    with:
+      go: ${{ tasks.approve.output }}
+      receipts: ${{ tasks.receipts.output }}
+      ok: ${{ tasks.receipts_ok.output }}
+    when: ${{ with.go == true && with.ok.valid && size(with.receipts.queued) > 0 }}
+    for_each:
+      items: ${{ with.receipts.queued }}
+      max_parallel: 1
+      fail_fast: false
+    timeout: "10s"
+    retry:
+      max_attempts: 120
+      backoff_strategy: fixed
+      backoff_ms: 1500
+      jitter: false
+      on_codes: [NIKA-BUILTIN-JQ-001]
+    invoke:
+      tool: "nika:fetch"
+      args:
+        url: "${{ const.server }}/history/${{ item.prompt_id }}"
+        mode: jq
+        jq: >-
+          if length == 0 then error("still rendering")
+          else [.[] | (.outputs // {})[] | (.images // [])[] | select(.type == "output")
+                | if (.subfolder // "") == "" then .filename else .subfolder + "/" + .filename end]
+          end
+    on_error:
+      recover: null
+
+  found:
+    after: { poll: terminal }
+    with:
+      go: ${{ tasks.approve.output }}
+      run_id: ${{ tasks.run_id.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:glob"
+      args: { pattern: "${{ const.renders_dir }}/${{ with.run_id }}/*.png" }   # no folder yet · an empty list
+
+  # A seed is live when the server named a file for it AND that file is on
+  # disk under `renders_dir`; every other seed is missing, with the reason.
+  split:
+    with:
+      go: ${{ tasks.approve.output }}
+      plan: ${{ tasks.plan.output }}
+      receipts: ${{ tasks.receipts.output }}
+      reported: ${{ tasks.poll.output }}
+      found: ${{ tasks.found.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          jobs: "${{ with.plan.result.jobs }}"
+          positive: "${{ with.plan.result.positive }}"
+          queued: "${{ with.receipts.queued }}"
+          reported: "${{ with.reported }}"
+          found: "${{ with.found }}"
+          dir: "${{ const.renders_dir }}"
+        expression: >-
+          .dir as $dir | .positive as $pos
+          | ((.found // []) | map(sub("^\\./"; "") | { (.): true }) | add // {}) as $disk
+          | ([.queued, (.reported // [])] | transpose
+             | map(select(.[0] != null) | { (.[0].prompt_id): .[1] }) | add // {}) as $files
+          | (.queued | map({ (.seed | tostring): .prompt_id }) | add // {}) as $pid
+          | (.jobs
+             | map(.seed as $s | .prefix as $prefix | $pid[$s | tostring] as $p
+                   | (if $p == null then null else $files[$p] end) as $named
+                   | (($named // []) | map($dir + "/" + .) | map(select($disk[.] == true))) as $here
+                   | { seed: $s, prefix: $prefix, prompt_id: $p, path: ($here[0] // null),
+                       reason: (if $p == null then "the server did not accept the job"
+                                elif $named == null then "queued, but no finished render was reported in time"
+                                elif ($named | length) == 0 then "the server reported no saved image"
+                                elif ($here | length) == 0 then "rendered as " + $named[0] + ", but not under " + $dir
+                                else null end) })) as $all
+          | { live: ($all | map(select(.path != null))),
+              missing: ($all | map(select(.path == null) | . + { positive: $pos })) }
+
+  # The stand-in is ALWAYS the offline mock provider: a labelled placeholder
+  # that costs nothing, never a paid render passed off as this server's.
+  stand_in:
+    with:
+      go: ${{ tasks.approve.output }}
+      split: ${{ tasks.split.output }}
+    when: ${{ with.go == true && size(with.split.missing) > 0 }}
+    for_each:
+      items: ${{ with.split.missing }}
+      max_parallel: 2
+      fail_fast: false
+    invoke:
+      tool: "nika:image_generate"
+      args:
+        provider: mock
+        prompt: "${{ item.positive }}"
+        seed: ${{ item.seed }}
+        aspect_ratio: "1:1"
+        output_dir: "out/comfyui-image-chain/stand-ins"
+        filename_prefix: "seed-${{ item.seed }}"
+        metadata: { stood_in_for: "comfyui", seed: "${{ item.seed }}", reason: "${{ item.reason }}" }
+    on_error:
+      recover: null                         # the frame is listed as lost · the sheet holds the rest
+
+  frames:
+    with:
+      go: ${{ tasks.approve.output }}
+      plan: ${{ tasks.plan.output }}
+      split: ${{ tasks.split.output }}
+      stand_in: ${{ tasks.stand_in.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          order: "${{ with.plan.result.jobs }}"
+          live: "${{ with.split.live }}"
+          missing: "${{ with.split.missing }}"
+          stood: "${{ with.stand_in }}"
+        expression: >-
+          (.order | map(.seed)) as $order
+          | ((.live | map(. + { source: "comfyui" }))
+             + ([.missing, (.stood // [])] | transpose
+                | map(select(.[0] != null)
+                      | .[0] + { source: "stand-in", path: (.[1].images[0].path // null) } | del(.positive))))
+          | sort_by(.seed as $s | $order | index([$s]))
+          | { frames: map(select(.path != null)), lost: map(select(.path == null)) }
+
+  finish:
+    with:
+      go: ${{ tasks.approve.output }}
+      frames: ${{ tasks.frames.output }}
+    when: ${{ with.go == true && size(with.frames.frames) > 0 }}
+    for_each:
+      items: ${{ with.frames.frames }}
+      max_parallel: 4
+      fail_fast: false
+    invoke:
+      tool: "nika:image_fx"
+      args:
+        input: "${{ item.path }}"
+        out: "out/comfyui-image-chain/final/seed-${{ item.seed }}.png"
+        seed: ${{ const.finish_seed }}
+        ops:                                # the finishing grade · a literal list (checked statically) · `image_fx/v1`, byte-deterministic
+          - levels: { brightness: 4, contrast: 12 }
+          - vignette: { strength: 90 }
+          - grain: { intensity: 10 }
+    on_error:
+      recover: null
+    extract:
+      paths: "map(select(. != null) | .path)"
+
+  sheet:
+    with:
+      go: ${{ tasks.approve.output }}
+      paths: ${{ tasks.finish.paths }}
+    when: ${{ with.go == true && with.paths != null && size(with.paths) > 0 }}   # `finish` skipped · null
+    invoke:
+      tool: "nika:image_compose"
+      args:
+        inputs: "${{ with.paths }}"
+        out: "out/comfyui-image-chain/contact-sheet.png"
+        layout: grid
+        scale: fit
+        cell: { width: 384, height: 384 }
+        gap: 8
+        padding: 16
+        background: "#14161c"
+
+  # The provenance manifest as ONE value: what was asked, the graph
+  # settings, and per frame its seed, its source (ComfyUI or stand-in,
+  # with the reason), its prompt id and the sha256 of the render and of
+  # the finished frame.
+  manifest:
+    with:
+      go: ${{ tasks.approve.output }}
+      run_id: ${{ tasks.run_id.output }}
+      plan: ${{ tasks.plan.output }}
+      frames: ${{ tasks.frames.output }}
+      finished: ${{ tasks.finish.output }}
+      sheet: ${{ tasks.sheet.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          run_id: "${{ with.run_id }}"
+          brief: "${{ inputs.brief }}"
+          plan: "${{ with.plan.result }}"
+          graph: ${{ const.graph }}
+          server: "${{ const.server }}"
+          frames: "${{ with.frames }}"
+          finished: "${{ with.finished }}"
+          sheet: "${{ with.sheet }}"
+        expression: >-
+          ([.frames.frames, (.finished // [])] | transpose
+           | map(select(.[0] != null) | .[0] as $f | .[1] as $fx
+                 | { seed: $f.seed, source: $f.source, prompt_id: $f.prompt_id,
+                     render: $f.path, render_sha256: ($fx.input_sha256 // null),
+                     final: ($fx.path // null), final_sha256: ($fx.sha256 // null),
+                     stood_in_because: $f.reason })) as $rows
+          | ($rows | map(select(.final != null))) as $done
+          | ($done | map(select(.source == "stand-in")) | length) as $stood
+          | { manifest_version: 1, workflow: "comfyui-image-chain", run_id: .run_id, brief: .brief,
+              server: .server,
+              prompts: { positive: .plan.positive, negative: .plan.negative },
+              graph: (.graph + { nodes: "KSampler · CheckpointLoaderSimple · EmptyLatentImage · CLIPTextEncode ×2 · VAEDecode · SaveImage" }),
+              frames: $done,
+              lost: (.frames.lost + ($rows | map(select(.final == null) | { seed, source, reason: "the finishing grade failed" }))),
+              stand_ins: $stood,
+              contact_sheet: (if .sheet == null then null else { path: .sheet.path, sha256: .sheet.sha256 } end),
+              note: (if $stood == 0 then "every frame was rendered by the local server"
+                     else ($stood | tostring) + " of " + ($done | length | tostring)
+                          + " frames are labelled mock stand-ins, not renders" end) }
+
+  manifest_ok:
+    with:
+      go: ${{ tasks.approve.output }}
+      manifest: ${{ tasks.manifest.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.manifest }}"
+        schema: ${{ const.manifest_schema }}
+
+  save_manifest:
+    with:
+      go: ${{ tasks.approve.output }}
+      manifest: ${{ tasks.manifest.output }}
+      ok: ${{ tasks.manifest_ok.output }}
+    when: ${{ with.go == true && with.ok.valid }}   # an invalid manifest is reported, never written
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/comfyui-image-chain/manifest.json"
+        content: "${{ with.manifest }}"     # ONE value · the engine serializes it (CONVENTIONS §5)
+        create_dirs: true
+
+  # ═══ REPORT · always, once the effects have settled ═══════════════════
+  # `law_holds: success` keeps the report phase silent on a red verdict:
+  # without it, the chart below would still write timing.svg.
+  timing:
+    after: { law_holds: success, save_manifest: terminal, sheet: terminal }
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:inspect"
+      args: { view: records }
+    extract:
+      slowest: ".tasks | map(select(.duration_ms > 0)) | sort_by(-.duration_ms) | .[:12]"
+
+  chart:
+    with:
+      go: ${{ tasks.approve.output }}
+      rows: ${{ tasks.timing.slowest }}
+    when: ${{ with.go == true && size(with.rows) > 0 }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.rows }}"
+        semantics: { id: category, duration_ms: duration_ms, status: category }
+        chart: { type: bar, x: id, y: duration_ms, color: status, title: "Where the time went · the slowest steps of this run" }
+        out: "out/comfyui-image-chain/timing.svg"
+
+  cost:
+    after: { law_holds: success, save_manifest: terminal, sheet: terminal }
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  # Always-run: `after: … terminal` admits every settled state of the
+  # effects, which it reads by `status` only. Its values stop at `frames`,
+  # which every recovery above keeps alive, so a failed grade, sheet or
+  # manifest still gets its report.
+  report:
+    after: { finish: terminal, sheet: terminal, save_manifest: terminal, chart: terminal }
+    with:
+      go: ${{ tasks.approve.output }}
+      plan: ${{ tasks.plan.output }}
+      verdict: ${{ tasks.invariants.output }}
+      receipts: ${{ tasks.receipts.output }}
+      receipts_ok: ${{ tasks.receipts_ok.output }}
+      split: ${{ tasks.split.output }}
+      frames: ${{ tasks.frames.output }}
+      cost: ${{ tasks.cost.output }}
+      s_poll: ${{ tasks.poll.status }}
+      s_stand_in: ${{ tasks.stand_in.status }}
+      s_finish: ${{ tasks.finish.status }}
+      s_sheet: ${{ tasks.sheet.status }}
+      s_manifest: ${{ tasks.save_manifest.status }}
+      s_chart: ${{ tasks.chart.status }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          plan: "${{ with.plan.result }}"
+          verdict: "${{ with.verdict }}"
+          receipts: "${{ with.receipts }}"
+          receipts_valid: "${{ with.receipts_ok.valid }}"
+          split: "${{ with.split }}"
+          frames: "${{ with.frames }}"
+          cost: "${{ with.cost }}"
+          server: "${{ const.server }}"
+          status: { poll: "${{ with.s_poll }}", stand_in: "${{ with.s_stand_in }}", finish: "${{ with.s_finish }}",
+                    sheet: "${{ with.s_sheet }}", manifest: "${{ with.s_manifest }}", chart: "${{ with.s_chart }}" }
+        expression: >-
+          { workflow: "comfyui-image-chain",
+            counts: { planned: (.plan.jobs | length),
+                      queued: (.receipts.queued | length),
+                      refused: (.receipts.refused | length),
+                      rendered: (.split.live | length),
+                      stood_in: (.frames.frames | map(select(.source == "stand-in")) | length),
+                      lost: (.frames.lost | length) },
+            decisions: { server: (if (.receipts.queued | length) > 0 then "answered at " + .server
+                                  else "no job accepted at " + .server + " · every frame is a stand-in" end),
+                         receipts: (if .receipts_valid then "valid" else "malformed · nothing was polled" end),
+                         manifest: (if .status.manifest == "success" then "written"
+                                    else "not written · " + .status.manifest end) },
+            missing: (.split.missing | map({ seed, reason })),
+            verdicts: .verdict,
+            tasks: .status,
+            cost: .cost }
+
+  save_report:
+    with:
+      go: ${{ tasks.approve.output }}
+      report: ${{ tasks.report.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/comfyui-image-chain/run-report.json"
+        content: "${{ with.report }}"       # ONE value · the engine serializes it (CONVENTIONS §5)
+        create_dirs: true
+
+outputs:
+  frames:
+    value: ${{ tasks.frames.output.frames }}
+    description: "One row per frame · seed, source (comfyui | stand-in), the reason a seed was stood in for, the render path"
+  contact_sheet:
+    value: ${{ tasks.sheet.output.path }}
+    description: "The contact sheet of the finished frames"
+  report:
+    value: ${{ tasks.report.output }}
+    description: "The run report · counts per branch, the server decision, verdicts and the run's own cost"

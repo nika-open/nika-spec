@@ -1,0 +1,116 @@
+# Invented subscriptions of an invented studio (Quarry Lane Studio). Every
+# vendor, plan, amount and date is fictional. Amounts are quoted strings
+# with two decimals: unquoted, YAML reads 96.10 as a float and the cents
+# are lost, so the radar's schema refuses a bare number.
+#
+# `renewal_date` is the next charge date; for a trial it is the day the trial
+# turns into a paid plan. `notice_days` is the cancellation notice the
+# contract asks for. `usage_signal: none` means no sign-in data exists for
+# the tool, so the radar cannot judge its seats.
+registry: saas-subscriptions
+company: Quarry Lane Studio
+subscriptions:
+  - id: quillnote-docs
+    vendor: Quillnote Docs
+    plan: Team
+    category: operations
+    status: active
+    cycle: monthly
+    amount: "96.00"
+    currency: EUR
+    seats: 12
+    renewal_date: "2026-11-29"
+    notice_days: 0
+    owner: ops
+    usage_signal: sso
+  - id: larkspur-crm
+    vendor: Larkspur CRM
+    plan: Growth
+    category: go-to-market
+    status: active
+    cycle: annual
+    amount: "2640.00"
+    currency: EUR
+    seats: 6
+    renewal_date: "2026-12-15"
+    notice_days: 14
+    owner: sales
+    usage_signal: sso
+  - id: tessera-design
+    vendor: Tessera Design
+    plan: Pro
+    category: design
+    status: active
+    cycle: monthly
+    amount: "54.00"
+    currency: USD
+    seats: 4
+    renewal_date: "2026-12-08"
+    notice_days: 0
+    owner: design
+    usage_signal: sso
+  - id: postlark-mail
+    vendor: Postlark Mail
+    plan: Starter
+    category: go-to-market
+    status: active
+    cycle: monthly
+    amount: "29.00"
+    currency: EUR
+    seats: 1
+    renewal_date: "2026-12-02"
+    notice_days: 0
+    owner: marketing
+    usage_signal: sso
+  - id: abacus-lane
+    vendor: Abacus Lane
+    plan: Business
+    category: operations
+    status: trial
+    cycle: monthly
+    amount: "39.00"
+    currency: EUR
+    seats: 3
+    renewal_date: "2026-11-28"
+    notice_days: 0
+    owner: finance
+    usage_signal: sso
+  - id: driftwood-backup
+    vendor: Driftwood Backup
+    plan: 2 TB
+    category: engineering
+    status: active
+    cycle: annual
+    amount: "199.00"
+    currency: EUR
+    seats: 1
+    renewal_date: "2027-02-10"
+    notice_days: 90
+    owner: engineering
+    usage_signal: none
+  - id: kestrel-ci
+    vendor: Kestrel CI
+    plan: Team
+    category: engineering
+    status: active
+    cycle: annual
+    amount: "4800.00"
+    currency: USD
+    seats: 8
+    renewal_date: "2027-01-20"
+    notice_days: 30
+    owner: engineering
+    usage_signal: sso
+  - id: hearth-hr
+    vendor: Hearth HR
+    plan: Core
+    category: operations
+    status: active
+    cycle: annual
+    amount: "1450.00"
+    currency: EUR
+    seats: 10
+    renewal_date: "2027-04-15"
+    notice_days: 60
+    owner: ops
+    usage_signal: sso

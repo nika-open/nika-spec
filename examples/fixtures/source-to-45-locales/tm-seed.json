@@ -1,0 +1,49 @@
+{
+  "day": "2026-10-01",
+  "source": {
+    "title": "d47e046f47eac0d56d834d56dfe8f020dd3ff6df5f363f3c5b15885f09701267",
+    "meta": "9e5ba96c5f43c21441dfe5ab726d4a4a2ebd432d185c5d4eca00f4a524b8a932",
+    "s1_heading": "4094ce2904314945866c7d8e6d951e2dad7f911cbfed22be4a71f1064298a4d9",
+    "s1_body": "ad7dd3da148bae2c5c20e83191d7d9039c0accf22b1482727af748de94997b15",
+    "s2_heading": "6187ba0755cb65ec2a6f76bd7a9f1ab124c7af1d21ce8c5529b496dda0d93ac2",
+    "s2_body": "442894968efc5e453e00550c8cc45bdb6b74757056974106b36b3041ddcc33a1",
+    "s3_heading": "c1f4b2faf262360d1efa78210993a8bd11072119e6415a570ce291f8a8ca500d",
+    "s3_body": "961a12230bd805843d7c98307a8cf74527ae816d7cf83159298203eda04cbfb5",
+    "s4_heading": "43696d2e8248b09bd524fba745b8c7c59564bd554935982dcad6cafa3c1be39c"
+  },
+  "locales": {
+    "de": {
+      "title": "Erste Schritte mit {{product_name}}",
+      "meta": "Richten Sie {{product_name}} in 10 Minuten ein: Arbeitsbereich anlegen, Team einladen und die erste Seite veröffentlichen.",
+      "s1_heading": "Einen Arbeitsbereich anlegen",
+      "s1_body": "Öffnen Sie https://app.example.com/signup und wählen Sie einen Namen für den Arbeitsbereich. Der kostenlose Tarif speichert 30 Tage Verlauf für bis zu 3 Mitglieder.",
+      "s2_heading": "Das Team einladen",
+      "s2_body": "Öffnen Sie Einstellungen, dann Mitglieder. Jeder Einladungslink bleibt 7 Tage gültig. Teams mit einem kostenpflichtigen Tarif können sich per SSO anmelden.",
+      "s3_heading": "Die erste Seite veröffentlichen",
+      "s3_body": "Seiten unterstützen Markdown. Um aus einem Skript zu veröffentlichen, rufen Sie die API mit dem Schlüssel Ihres Arbeitsbereichs auf. Nicht weiter? Schreiben Sie an {{support_email}}: Wir antworten innerhalb von 48 Stunden.",
+      "s4_heading": "Nächste Schritte"
+    },
+    "es": {
+      "title": "Primeros pasos con {{product_name}}",
+      "meta": "Configura {{product_name}} en 10 minutos: crea un espacio de trabajo, invita a tu equipo y publica tu primera página.",
+      "s1_heading": "Crear un espacio de trabajo",
+      "s1_body": "Abre https://app.example.com/signup y elige un nombre para el espacio de trabajo. El plan gratuito guarda 30 días de historial para hasta 3 miembros.",
+      "s2_heading": "Invitar a tu equipo",
+      "s2_body": "Abre Ajustes y luego Miembros. Cada enlace de invitación es válido durante 7 días. Los equipos con un plan de pago pueden iniciar sesión con SSO.",
+      "s3_heading": "Publicar tu primera página",
+      "s3_body": "Las páginas aceptan Markdown. Para publicar desde un script, llama a la API con la clave de tu espacio de trabajo. ¿Te has atascado? Escribe a {{support_email}}: respondemos en menos de 48 horas.",
+      "s4_heading": "Próximos pasos"
+    },
+    "fr": {
+      "title": "Bien démarrer avec {{product_name}}",
+      "meta": "Configurez {{product_name}} en 10 minutes : créez un espace de travail, invitez votre équipe et publiez votre première page.",
+      "s1_heading": "Créer un espace de travail",
+      "s1_body": "Ouvrez https://app.example.com/signup et choisissez un nom d'espace de travail. L'offre gratuite conserve 30 jours d'historique pour 3 membres au maximum.",
+      "s2_heading": "Inviter votre équipe",
+      "s2_body": "Ouvrez Réglages, puis Membres. Chaque lien d'invitation reste valable 7 jours. Les équipes d'une offre payante peuvent se connecter avec SSO.",
+      "s3_heading": "Publier votre première page",
+      "s3_body": "Les pages acceptent le Markdown. Pour publier depuis un script, appelez l'API avec la clé de votre espace de travail. Bloqué ? Écrivez à {{support_email}} : nous répondons sous 48 heures.",
+      "s4_heading": "Étapes suivantes"
+    }
+  }
+}
