@@ -16,6 +16,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Added · standing consent, the one exception to fresh consent (2026-11-24)
+
+- [10 §The two judges that remain](./spec/10-authority.md#the-two-judges-that-remain)
+  said that a decided approval ticket is single-use for its run and that
+  nothing substitutes for fresh consent. It now names one exception: a
+  person may let an affirmative decision stand for later runs of the
+  unchanged workflow, as a standing consent record. A later run mints its
+  own ticket and takes its decision from the record. No ticket crosses a
+  run, and every refusal of clause (2) reads as before.
+- The exception holds under ten clauses: a separate act of a person, never
+  a default, a policy or an agent; the content hash and a world hash, any
+  difference re-prompting; a list of what the record does not cover, kept
+  in the record; an expiry, 31 days by default, that cannot be removed
+  where `permits:` let the workflow send data out; a `permits:` block and
+  a named effect level; a cost ceiling per run; one copy with the project
+  and one with the operator, valid only where they agree; gates the
+  lethal-trifecta law requires, with a plain sentence at grant time; a
+  `consent_reused` event beside `approval_decided`, its source named
+  `standing`; revocation for the runs that follow. A gate passed on a
+  record counts among the five approvals of a run. The chapter also says
+  what the exception does not claim.
+- An engine may offer standing consent and is not required to. Without a
+  record the law is unchanged, and no diagnostic code is added.
+- The reference engine does not implement standing consent. The law is
+  specified ahead of it.
+
 ### Added · a first pack of recipe jobs (2026-11-24)
 
 - Seventeen job workflows join `examples/`, each with its fixtures under
