@@ -1,0 +1,9 @@
+[2026-11-23T12:04:11Z] INFO  job e2e-browser · shard 2 of 3 · runner ci-runner-04
+[2026-11-23T12:04:12Z] INFO  commit 9e1d0a4 · branch main · 38 specs
+[2026-11-23T12:05:58Z] INFO  PASS checkout::cart_totals (4.1s)
+[2026-11-23T12:06:59Z] INFO  PASS checkout::address_form (3.7s)
+[2026-11-23T12:08:01Z] ERROR test checkout::payment_redirect timed out after 60.0s waiting for #confirm-button
+[2026-11-23T12:08:01Z] INFO    at wait_for (harness/wait.rs:41)
+[2026-11-23T12:08:01Z] INFO    the same spec passed on this commit in pipeline 2205 (2.9s)
+[2026-11-23T12:08:02Z] INFO    no retry is configured for this spec
+[2026-11-23T12:08:03Z] INFO  37 passed · 1 failed · exit 1

@@ -1,0 +1,620 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T3 fan-out · SEO / growth
+#
+# A spreadsheet of services and cities becomes a set of landing pages, one per
+# row, each written by the model and then judged by rules before it ships:
+# length limits, unique titles and h1s, a body above a word floor, and no page
+# that is a near copy of another. The pages that pass land as markdown with
+# links to their related pages and a sitemap; the rest go to a review list
+# with the reasons.
+#
+# Demonstrates ·
+#   - the normalize phase BEFORE any model call · `nika:convert` CSV→JSON,
+#     a per-row `nika:validate`, and a jq slug + `group_by` that drops the
+#     duplicate row, so a broken or repeated row never costs a generation;
+#     the two inputs are validated too, before they reach a URL
+#   - `nika:assert` as the cost guard · the planned output tokens are computed
+#     in jq and asserted against `const.budget` before the fan-out starts,
+#     together with the proof of the QA law on a hand-computed case
+#   - one typed generation per row · `infer.schema:` in a `for_each` with
+#     `max_parallel`, `retry:` and `on_error: recover: null`
+#   - the QA law in jq, written ONCE in `const.qa_law` and applied both to this
+#     run and to the case · `group_by` for unique titles and h1s, word
+#     3-shingles + Jaccard for near-duplicate bodies
+#   - internal links computed from the data · each shipped page links to the
+#     shipped pages that share its service or its city, never to a page that
+#     did not ship
+#   - two branch points · the page fan-out writes only when something passed,
+#     the review list only when something failed
+#   - pages/ mirrors the sitemap · after the writes, `nika:glob` lists the
+#     page files and `nika:remove_file` deletes each one this run did not
+#     ship, so a page that failed today stops being served from yesterday
+#   - `nika:hash` of the shipped manifest as the build id · `nika:chart` of
+#     body length per page · `nika:inspect` cost folded into
+#     run-report.json · `nika:emit` the build event
+#
+# Run · nika run examples/programmatic-seo-pages.nika --model mock/echo
+#   Zero keys. The fixture holds eight rows: one has no city (refused by the
+#   validator) and one repeats the first page (dropped by slug), so six pages
+#   are generated. mock/echo answers every string with the word `mock`, so
+#   all six fail QA (no city in the title, a one-word body, every title and
+#   body identical) and land in review.json beside the two refused rows; the
+#   sitemap is written with no URL and pages/ is emptied to match it (any
+#   page a previous run shipped is removed). A real model
+#   (ollama serving qwen3.5:4b, the envelope seat) fills the page branch.
+#   Run it from the repo root: every path resolves from the working directory.
+
+nika: programmatic-seo-pages
+
+# The house seat, a THINKING model: the think block and the page JSON both
+# count against `max_tokens` (engine#428).
+model: ollama/qwen3.5:4b
+
+inputs:
+  site_url:
+    type: string
+    default: "https://services.example.org"
+    description: "The public base URL the sitemap and the internal links point at · no request is made to it"
+  lastmod:
+    type: string
+    default: ""
+    description: "The sitemap <lastmod> date (YYYY-MM-DD) · empty means today"
+
+const:
+  rows_path: "examples/fixtures/programmatic-seo-pages/service-city.csv"
+  # The rules the QA law reads. `max_tokens` below is a literal (a `${{ }}` is
+  # refused at parse), so `budget.cap` restates it: keep the two in step.
+  rules:
+    title_max: 60
+    meta_max: 155
+    body_min_words: 120
+    shingle: 3              # words per shingle
+    near_dup: 0.6           # Jaccard at or above this is a near-duplicate
+    related_links: 3        # internal links per shipped page
+  budget:
+    cap: 3000               # = generate.infer.max_tokens
+    attempts: 2             # = generate.retry.max_attempts
+    output_tokens: 40000    # the most this run may ask the model to write
+  # The QA law, written once. `qa` applies it to this run's pages and `prove`
+  # applies it to `law_case`, so the proof tests the expression that decides
+  # what ships, not a copy of it. `trim` is defined here because jq 1.7 has
+  # no such builtin, and the conformance oracle compiles every expression
+  # with it.
+  qa_law: |
+    def trim: gsub("^\\s+|\\s+$"; "");
+    def words: ascii_downcase | [scan("[a-z0-9']+")];
+    def shingles($k): words as $w
+      | if ($w | length) < $k then [$w | join(" ")]
+        else [range(0; ($w | length) - $k + 1) as $i | $w[$i:$i + $k] | join(" ")] end
+      | unique;
+    def jaccard($a; $b): ($a + $b | unique | length) as $u
+      | if $u == 0 then 0 else (($a - ($a - $b)) | length) / $u end;
+    def law:
+      .rules as $r
+      | (.pages | map(select(.page != null))) as $live
+      | ($live | map(.page.title | ascii_downcase | trim) | group_by(.) | map(select(length > 1) | .[0])) as $dup_titles
+      | ($live | map(.page.h1 | ascii_downcase | trim) | group_by(.) | map(select(length > 1) | .[0])) as $dup_h1s
+      | ($live | map({ slug, sh: (.page.body | shingles($r.shingle)) })) as $sh
+      | .pages
+      | map(.slug as $s | .city as $city | .page as $g
+          | if $g == null then { slug: $s, ok: false, reasons: ["no answer from the model"], words: 0, similar_to: null, similarity: 0 }
+            else
+              ($g.body | words | length) as $wc
+              | ([$sh[] | select(.slug == $s)][0].sh) as $mine
+              | ([$sh[] | select(.slug != $s) | { slug, j: jaccard($mine; .sh) }] | max_by(.j)) as $near
+              | [ (if ($g.title | length) > $r.title_max then "title is \($g.title | length) chars, the limit is \($r.title_max)" else empty end),
+                  (if ($g.title | ascii_downcase | contains($city | ascii_downcase)) then empty else "title does not name \($city)" end),
+                  (if any($dup_titles[]; . == ($g.title | ascii_downcase | trim)) then "title is shared with another page" else empty end),
+                  (if ($g.h1 | trim) == "" then "h1 is empty" elif any($dup_h1s[]; . == ($g.h1 | ascii_downcase | trim)) then "h1 is shared with another page" else empty end),
+                  (if ($g.meta_description | length) > $r.meta_max then "meta description is \($g.meta_description | length) chars, the limit is \($r.meta_max)" else empty end),
+                  (if $wc < $r.body_min_words then "body is \($wc) words long, under the floor of \($r.body_min_words)" else empty end),
+                  (if ($g.faq | map(.q | ascii_downcase | trim) | unique | length) < ($g.faq | length) then "an FAQ question repeats" else empty end),
+                  (if any($g.faq[]; (.a | trim) == "") then "an FAQ answer is empty" else empty end),
+                  (if $near != null and $near.j >= $r.near_dup then "near-duplicate of \($near.slug) (Jaccard \($near.j * 100 | round)%)" else empty end) ] as $why
+              | { slug: $s, ok: ($why == []), reasons: $why, words: $wc,
+                  similar_to: (if ($near.j // 0) > 0 then $near.slug else null end),
+                  similarity: ((($near.j // 0) * 100 | round) / 100) }
+            end);
+  # The case, computed by hand: p1 passes and shares no 2-word shingle with
+  # any page; p2 has a 4-word body and a title without its city; p3 and p4
+  # share a title and a body (Jaccard 1); p5 never answered.
+  law_case:
+    rules: { title_max: 60, meta_max: 155, body_min_words: 6, shingle: 2, near_dup: 0.6, related_links: 3 }
+    pages:
+      - slug: "p1"
+        city: "Port Alder"
+        page:
+          title: "Gutter cleaning in Port Alder"
+          h1: "Gutter cleaning, Port Alder"
+          meta_description: "Clear gutters before the rain."
+          body: "We clear gutters on two storey homes and haul the debris away."
+          faq: [{ q: "How long?", a: "Two hours." }, { q: "Ladders?", a: "Ours." }, { q: "Debris?", a: "Taken away." }]
+      - slug: "p2"
+        city: "Kestrel Hill"
+        page:
+          title: "Leaf guards fitted on request"
+          h1: "Leaf guards"
+          meta_description: "Short."
+          body: "Leaf guards on request."
+          faq: [{ q: "Price?", a: "From 79." }, { q: "When?", a: "Within 72 hours." }, { q: "Guards?", a: "Yes." }]
+      - slug: "p3"
+        city: "Ashby Cross"
+        page:
+          title: "Window cleaning in Ashby Cross"
+          h1: "Windows in Ashby Cross"
+          meta_description: "Frames and sills included."
+          body: "Frames and sills are cleaned with every window visit in town."
+          faq: [{ q: "Sills?", a: "Included." }, { q: "Frames?", a: "Included." }, { q: "Price?", a: "From 59." }]
+      - slug: "p4"
+        city: "Ashby Cross"
+        page:
+          title: "Window cleaning in Ashby Cross"
+          h1: "Ashby Cross window cleaning"
+          meta_description: "Frames and sills included."
+          body: "Frames and sills are cleaned with every window visit in town."
+          faq: [{ q: "Sills?", a: "Included." }, { q: "Frames?", a: "Included." }, { q: "Price?", a: "From 59." }]
+      - { slug: "p5", city: "Port Alder", page: null }
+  law_want:
+    ok: [true, false, false, false, false]
+    reasons: [0, 2, 2, 2, 1]
+    similar_to: [null, null, "p4", "p3", null]
+
+permits:
+  tools: ["nika:assert", "nika:chart", "nika:convert", "nika:date", "nika:emit", "nika:glob", "nika:hash", "nika:inspect", "nika:jq", "nika:read", "nika:remove_file", "nika:validate", "nika:write"]
+  fs:
+    read:
+      - "examples/fixtures/programmatic-seo-pages/service-city.csv"
+      # `nika:glob` opens the ROOT of its pattern, and a directory grant does
+      # not cover its children: the walk needs the directory, the listing
+      # needs the files. One level, so `*` and not `**`.
+      - "out/programmatic-seo-pages/pages"
+      - "out/programmatic-seo-pages/pages/*.md"
+    write:
+      # One markdown file per shipped page, directly in pages/, written by
+      # `write_pages` and removed by `prune`. The slug is computed in jq from
+      # the CSV and holds only [a-z0-9-], and `*` never crosses `/`, so no row
+      # can steer a write or a removal out of pages/.
+      - "out/programmatic-seo-pages/pages/*.md"
+      - "out/programmatic-seo-pages/qa-words.svg"
+      - "out/programmatic-seo-pages/review.json"
+      - "out/programmatic-seo-pages/run-report.json"
+      - "out/programmatic-seo-pages/sitemap.xml"
+
+tasks:
+  # ── gather ──────────────────────────────────────────────────────────
+  rows_raw:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.rows_path }}" }
+
+  today:
+    invoke:
+      tool: "nika:date"
+      args: { op: now }
+    extract:
+      day: ".[:10]"                       # nika:date returns the ISO string itself
+
+  # ── normalize · every row is admitted or refused before the model ───
+  # CSV cells arrive as strings. Trimming here is what makes the duplicate
+  # export (`gutter cleaning ` with a trailing space) collide with row 1.
+  rows:
+    with:
+      csv: ${{ tasks.rows_raw.output }}
+    invoke:
+      tool: "nika:convert"
+      args: { input: "${{ with.csv }}", from: csv, to: json, has_header: true }
+
+  tidy:
+    with:
+      rows: ${{ tasks.rows.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: "${{ with.rows }}"
+        expression: >-
+          def trim: gsub("^\\s+|\\s+$"; "");
+          [range(0; length) as $i | .[$i]
+            | with_entries(.value |= trim)
+            | . + { row: ($i + 2),
+                    slug: ((.service + " " + .city) | ascii_downcase
+                           | gsub("[^a-z0-9]+"; "-") | ltrimstr("-") | rtrimstr("-")) }]
+
+  # One verdict per row. Invalid data is a report, never a task failure
+  # (builtins §validate), so the bad row is counted, not fatal.
+  admit:
+    with:
+      rows: ${{ tasks.tidy.output }}
+    for_each:
+      items: ${{ with.rows }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ item }}"
+        format: json
+        schema:
+          type: object
+          required: [service, city, price_from, response_hours, slug]
+          properties:
+            service: { type: string, minLength: 3, maxLength: 60 }
+            city: { type: string, minLength: 2, maxLength: 60 }
+            price_from: { type: string, pattern: "^[0-9]{1,5}$" }
+            response_hours: { type: string, pattern: "^[0-9]{1,3}$" }
+            notes: { type: string, maxLength: 200 }
+            slug: { type: string, pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", maxLength: 80 }
+
+  # The join · each row beside its own verdict (a for_each output is in ITEM
+  # ORDER), then one page per slug: the first row of a slug wins and the rest
+  # are refused as duplicates. The plan's token figure is computed here.
+  catalog:
+    with:
+      rows: ${{ tasks.tidy.output }}
+      verdicts: ${{ tasks.admit.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          rows: "${{ with.rows }}"
+          verdicts: "${{ with.verdicts }}"
+          budget: ${{ const.budget }}
+        expression: >-
+          .budget as $b
+          | ([.rows, .verdicts] | transpose) as $pairs
+          | ($pairs | map(select(.[1].valid) | .[0]) | group_by(.slug)) as $groups
+          | ($groups | map(.[0]) | sort_by(.row)) as $unique
+          | { unique: $unique,
+              refused: (($pairs | map(select(.[1].valid | not)
+                                      | { row: .[0].row, slug: .[0].slug, stage: "row",
+                                          service: .[0].service, city: .[0].city,
+                                          reasons: (.[1].errors | map("\(.path) \(.message)")) }))
+                        + ($groups | map(.[1:][] | { row, slug, service, city, stage: "row",
+                                                     reasons: ["duplicate of an earlier row with the same slug"] }))),
+              planned_tokens: (($unique | length) * $b.cap * $b.attempts),
+              token_limit: $b.output_tokens }
+
+  # ── judge before spending · the inputs, the law and the budget ──────
+  # The two inputs land in links and in the sitemap, and an input is
+  # untrusted by default: admit their shape before anything is built on them.
+  inputs_ok:
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: { site_url: "${{ inputs.site_url }}", lastmod: "${{ inputs.lastmod }}" }
+        format: json
+        schema:
+          type: object
+          required: [site_url, lastmod]
+          properties:
+            site_url: { type: string, pattern: "^https://[a-z0-9.-]+(/[a-z0-9._-]+)*/?$", maxLength: 200 }
+            lastmod: { type: string, pattern: "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$" }
+
+  prove:
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: ${{ const.law_case }}
+        expression: >-
+          ${{ const.qa_law }}
+          law | { ok: map(.ok), reasons: map(.reasons | length), similar_to: map(.similar_to) }
+
+  # Four invariants, one refusal, before the first token: the inputs have
+  # their shape, the law still gives the hand-computed answers, the plan fits
+  # the budget, and at least one row survived normalization. `check` prints one advisory
+  # [assert-quarantine] hint here: it fires on any file that both asserts and
+  # writes, and dropping the assert trades it for the paid-run [unproven-law]
+  # hint. A red assert here stops the run before any write.
+  preflight:
+    with:
+      inputs: ${{ tasks.inputs_ok.output }}
+      proof: ${{ tasks.prove.output }}
+      plan: ${{ tasks.catalog.output }}
+    invoke:
+      tool: "nika:assert"
+      args:
+        condition: "${{ with.inputs.valid && with.proof == const.law_want && with.plan.planned_tokens <= with.plan.token_limit && size(with.plan.unique) > 0 }}"
+        message: "preflight refused · an input is malformed, the QA law drifted from its hand-computed case, the plan exceeds const.budget.output_tokens, or no row survived"
+
+  # ── act · one typed page per row ────────────────────────────────────
+  generate:
+    after: { preflight: success }
+    with:
+      rows: ${{ tasks.catalog.output.unique }}
+    for_each:
+      items: ${{ with.rows }}
+      max_parallel: 3                     # a local seat serves one at a time · a cloud seat's rate limit is the real bound
+      max_items: 12                       # 12 × 3000 × 2 = 72,000 · preflight refuses far below this ceiling
+      fail_fast: false
+    retry:
+      max_attempts: 2                     # = const.budget.attempts
+      backoff_strategy: exponential
+    on_error:
+      recover: null                       # a page that never answered is a review entry, not a dead run
+    infer:
+      # a reasoning model needs 16384 here, or a documented run.reasoning.effort: low
+      max_tokens: 3000                    # = const.budget.cap · think block + one page
+      system: |
+        You write local service landing pages. Use only the facts in the row:
+        never invent prices, guarantees, reviews, awards or addresses. The title
+        names the service and the city. Plain words, no superlatives.
+      prompt: |
+        Service · ${{ item.service }}
+        City · ${{ item.city }}
+        Price from · ${{ item.price_from }} (local currency)
+        Response time · within ${{ item.response_hours }} hours
+        Detail · ${{ item.notes }}
+        Write the page: a title of at most 60 characters, an h1, a meta
+        description of at most 155 characters, a body of 150 to 250 words, and
+        three questions a customer in ${{ item.city }} would ask, with answers.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [title, h1, meta_description, body, faq]
+        properties:
+          title: { type: string, maxLength: 120 }
+          h1: { type: string, maxLength: 120 }
+          meta_description: { type: string, maxLength: 320 }
+          body: { type: string, maxLength: 4000 }
+          faq:
+            type: array
+            minItems: 3
+            maxItems: 3
+            items:
+              type: object
+              additionalProperties: false
+              required: [q, a]
+              properties:
+                q: { type: string, maxLength: 160 }
+                a: { type: string, maxLength: 600 }
+
+  # ── judge · the law on what came back ───────────────────────────────
+  qa:
+    with:
+      rows: ${{ tasks.catalog.output.unique }}
+      pages: ${{ tasks.generate.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          rows: "${{ with.rows }}"
+          pages: "${{ with.pages }}"
+          rules: ${{ const.rules }}
+        expression: >-
+          ${{ const.qa_law }}
+          { rules, pages: ([.rows, .pages] | transpose
+                           | map(.[0] + { page: .[1] })) }
+          | { pages: .pages, verdicts: law }
+          | [.pages, .verdicts] | transpose | map(.[0] + { verdict: .[1] })
+
+  # The artifacts as values · markdown pages with front matter and related
+  # links, the sitemap, the review list. A shipped page links only to other
+  # shipped pages: same service first, then same city.
+  assemble:
+    with:
+      judged: ${{ tasks.qa.output }}
+      refused: ${{ tasks.catalog.output.refused }}
+      day: ${{ tasks.today.day }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          judged: "${{ with.judged }}"
+          refused: "${{ with.refused }}"
+          site: "${{ inputs.site_url }}"
+          lastmod: "${{ inputs.lastmod }}"
+          day: "${{ with.day }}"
+          links: ${{ const.rules.related_links }}
+        expression: >-
+          def trim: gsub("^\\s+|\\s+$"; "");
+          def xml: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;") | gsub("\""; "&quot;");
+          def plain: gsub("[\\[\\]\\r\\n]+"; " ") | trim;
+          (.site | rtrimstr("/")) as $site
+          | (if .lastmod == "" then .day else .lastmod end) as $mod
+          | .links as $n
+          | (.judged | map(select(.verdict.ok))) as $ship
+          | { ship: ($ship | map(. as $p
+                | ([$ship[] | select(.slug != $p.slug and .service == $p.service)]
+                   + [$ship[] | select(.slug != $p.slug and .city == $p.city and .service != $p.service)])[:$n] as $rel
+                | { slug,
+                    related: ($rel | map(.slug)),
+                    markdown: ("---\ntitle: " + (.page.title | @json)
+                      + "\ndescription: " + (.page.meta_description | @json)
+                      + "\nslug: " + .slug
+                      + "\nservice: " + (.service | @json)
+                      + "\ncity: " + (.city | @json)
+                      + "\n---\n\n# " + (.page.h1 | plain) + "\n\n" + .page.body
+                      + "\n\n## Questions\n\n"
+                      + (.page.faq | map("### " + (.q | plain) + "\n\n" + .a) | join("\n\n"))
+                      + (if ($rel | length) > 0
+                         then "\n\n## Related services\n\n"
+                              + ($rel | map("- [" + (.page.title | plain) + "](" + $site + "/" + .slug + "/)") | join("\n"))
+                         else "" end)
+                      + "\n") })),
+              review: (.refused + (.judged | map(select(.verdict.ok | not)
+                         | { row, slug, stage: "qa", reasons: .verdict.reasons, draft: .page }))),
+              sitemap: ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+                        + ($ship | map("  <url><loc>" + ($site + "/" + .slug + "/" | xml) + "</loc><lastmod>" + ($mod | xml) + "</lastmod></url>\n") | join(""))
+                        + "</urlset>\n"),
+              chart: (.judged | map({ slug, words: .verdict.words,
+                                      verdict: (if .verdict.ok then "ships" else "review" end) })) }
+
+  # ── act · the two branches ──────────────────────────────────────────
+  write_pages:
+    with:
+      ship: ${{ tasks.assemble.output.ship }}
+    when: ${{ size(with.ship) > 0 }}      # nothing passed · nothing to write
+    for_each:
+      items: ${{ with.ship }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/programmatic-seo-pages/pages/${{ item.slug }}.md"
+        content: "${{ item.markdown }}"
+        create_dirs: true
+
+  write_review:
+    with:
+      review: ${{ tasks.assemble.output.review }}
+    when: ${{ size(with.review) > 0 }}    # a clean build writes no review list
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/programmatic-seo-pages/review.json"
+        content: "${{ with.review }}"
+        create_dirs: true
+
+  # Written on every build, empty or not: a sitemap that still lists last
+  # build's pages after they stopped passing would be the worse lie.
+  write_sitemap:
+    with:
+      sitemap: ${{ tasks.assemble.output.sitemap }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/programmatic-seo-pages/sitemap.xml"
+        content: "${{ with.sitemap }}"
+        create_dirs: true
+
+  # ── act · prune · pages/ and the sitemap agree ──────────────────────
+  # A page that shipped last build and fails today must not stay online
+  # beside a sitemap that dropped it. The glob runs after the writes, so it
+  # sees this build's pages too; jq keeps only the files no slug shipped.
+  existing:
+    after: { write_pages: terminal }
+    invoke:
+      tool: "nika:glob"
+      args:
+        pattern: "out/programmatic-seo-pages/pages/*.md"
+        exclude: ["**/README.md"]         # a note you keep beside the pages is never pruned
+
+  stale:
+    with:
+      files: ${{ tasks.existing.output }}
+      ship: ${{ tasks.assemble.output.ship }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { files: "${{ with.files }}", keep: "${{ with.ship }}" }
+        expression: >-
+          (.keep | map("out/programmatic-seo-pages/pages/" + .slug + ".md")) as $keep
+          | (.files | map(ltrimstr("./"))) - $keep
+
+  prune:
+    with:
+      stale: ${{ tasks.stale.output }}
+    when: ${{ size(with.stale) > 0 }}     # nothing went stale · nothing to remove
+    for_each:
+      items: ${{ with.stale }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:remove_file"
+      args: { path: "${{ item }}" }
+
+  # ── report ──────────────────────────────────────────────────────────
+  # The build id is a fingerprint of what shipped: two builds that ship the
+  # same pages and links carry the same id.
+  build_id:
+    with:
+      ship: ${{ tasks.assemble.output.ship }}
+    invoke:
+      tool: "nika:hash"
+      args: { content: "${{ with.ship }}", algo: blake3 }
+
+  words_chart:
+    with:
+      rows: ${{ tasks.assemble.output.chart }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.rows }}"
+        semantics: { slug: category, words: count, verdict: category }
+        chart: { type: bar, x: slug, y: words, color: verdict, title: "Body words per page" }
+        out: out/programmatic-seo-pages/qa-words.svg
+
+  # `terminal` admits every settled state: the cost and the report land
+  # whatever the three writes did. They do not land when `preflight` refuses
+  # the run, because every task they read is then cancelled; the assert's
+  # message is that run's record.
+  cost:
+    after: { prune: terminal, write_review: terminal, write_sitemap: terminal, words_chart: terminal }
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  run_report:
+    after: { prune: terminal, write_review: terminal, write_sitemap: terminal }
+    with:
+      plan: ${{ tasks.catalog.output }}
+      judged: ${{ tasks.qa.output }}
+      built: ${{ tasks.assemble.output }}
+      build: ${{ tasks.build_id.output }}
+      cost: ${{ tasks.cost.output }}
+      day: ${{ tasks.today.day }}
+      pages_status: ${{ tasks.write_pages.status }}
+      pruned: ${{ tasks.stale.output }}
+      review_status: ${{ tasks.write_review.status }}
+      sitemap_status: ${{ tasks.write_sitemap.status }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          plan: "${{ with.plan }}"
+          judged: "${{ with.judged }}"
+          built: "${{ with.built }}"
+          build: "${{ with.build }}"
+          cost: "${{ with.cost }}"
+          day: "${{ with.day }}"
+          pruned: "${{ with.pruned }}"
+          writes: { pages: "${{ with.pages_status }}", review: "${{ with.review_status }}", sitemap: "${{ with.sitemap_status }}" }
+        expression: >-
+          { day, build_id: .build,
+            counts: { rows: ((.plan.unique | length) + (.plan.refused | length)),
+                      refused_rows: (.plan.refused | length),
+                      generated: (.judged | length),
+                      answered: (.judged | map(select(.page != null)) | length),
+                      shipped: (.built.ship | length),
+                      review: (.built.review | length),
+                      internal_links: (.built.ship | map(.related | length) | add // 0),
+                      pruned: (.pruned | length) },
+            decisions: { planned_tokens: .plan.planned_tokens, token_limit: .plan.token_limit,
+                         pruned_files: .pruned,
+                         page_branch: .writes.pages, review_branch: .writes.review, sitemap: .writes.sitemap },
+            verdicts: (.judged | map({ slug, ok: .verdict.ok, reasons: .verdict.reasons,
+                                       words: .verdict.words, similar_to: .verdict.similar_to,
+                                       similarity: .verdict.similarity })),
+            cost: .cost }
+
+  write_run_report:
+    with:
+      report: ${{ tasks.run_report.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/programmatic-seo-pages/run-report.json"
+        content: "${{ with.report }}"
+        create_dirs: true
+
+  # A LOCAL journal event: the build is on disk and the event says so.
+  announce:
+    with:
+      report: ${{ tasks.run_report.output }}
+    invoke:
+      tool: "nika:emit"
+      args:
+        event_type: "seo.pages.built"
+        payload:
+          build_id: "${{ with.report.build_id }}"
+          counts: "${{ with.report.counts }}"
+
+outputs:
+  shipped:
+    value: ${{ tasks.assemble.output.ship }}
+    description: "The pages that passed QA · slug, related slugs and the markdown that landed"
+  review:
+    value: ${{ tasks.assemble.output.review }}
+    description: "Every refused row and every page that failed QA, with the reasons"
+  report:
+    value: ${{ tasks.run_report.output }}
+    description: "Counts per branch, the budget decision, the verdicts and the run's own cost"

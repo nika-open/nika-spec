@@ -1,0 +1,476 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · creators / marketing
+#
+# A designer has a batch of artistic QR codes for one link, and wants the
+# poster set: the best code on the campaign scene, in print, story, square
+# and feed sizes, each one proven to scan. qrscan, the open-source QR Code
+# AI scanner, decodes and scores every code; jq keeps only the codes that
+# decode to the exact link above a score floor, and ranks them. The best
+# one goes on the scene, every export is scanned again under the harsher
+# capture preset, and a contact sheet, a manifest and a run report land
+# under out/qr-art-forge/.
+#
+# Where the codes come from · this run judges codes already on disk. On
+# this engine a run that calls a web API cannot pass what it fetched to a
+# subprocess (the order law, NIKA-SEC-015), and `nika:fetch` returns text,
+# never image bytes. So a QR Code AI API call and this scan cannot share a
+# run: download the generated images first, put them under
+# `const.art_glob` (and its directory in `permits.fs.read`), then run.
+#
+# Demonstrates ·
+#   - a subprocess as the judge · `exec:` qrscan with `decode: json`, a
+#     `recover: null` per unreadable code, and `nika:validate` on its JSON
+#     before any field is trusted
+#   - the law in jq · exact text AND the floor, ranked by score; no model
+#     says whether a code scans
+#   - two branches from the verdicts · rejected codes land in
+#     rejected.json, the best code goes on to the posters
+#   - `nika:image_compose` + `nika:image_fx` · two layouts, two resizes,
+#     a contact sheet; every export rescanned with `--score-preset capture`
+#   - `nika:chart` of the design scores, `nika:hash` over the manifest,
+#     `nika:inspect` in the report
+#   - one confirm gate, before the first subprocess (see `approve`)
+#
+# Needs · qrscan on PATH (brew install qrcode-ai-com/tap/qrscan). The
+#   sample scores below were measured with qrscan 0.9.0. Without it, every
+#   scan recovers to null, every code is rejected and no poster is made.
+#
+# Run · nika run examples/qr-art-forge.nika --answer approve=true
+#   No model is called (`--model mock/echo` changes nothing). Without the
+#   answer the run pauses at `approve` and exits 4. The five sample codes
+#   cover every branch: variant-1 (100) and variant-4 (95) pass, variant-2
+#   decodes but scores 66, variant-3 encodes another link, and variant-5
+#   does not decode at all. variant-1 goes on the posters.
+#   Clean up · rm -rf out/qr-art-forge
+
+nika: qr-art-forge
+
+inputs:
+  target_url:
+    type: string
+    default: "https://example.com/menu/spring"
+    description: "The exact link every kept code must decode to"
+
+const:
+  art_glob: "examples/fixtures/qr-art-forge/art/*.png"
+  scene: "examples/fixtures/qr-art-forge/scene.png"
+  # Score floors, 0..100 · `design` skips perspective and rotation (a clean
+  # preview), `capture` runs all six axes (a phone pointed at a print).
+  design_floor: 70
+  capture_floor: 60
+  exports: [print, story, square, thumb]
+
+permits:
+  exec: ["qrscan"]                 # the ONE program this workflow may run
+  tools: ["nika:chart", "nika:date", "nika:glob", "nika:hash", "nika:image_compose", "nika:image_fx", "nika:inspect", "nika:jq", "nika:prompt", "nika:validate", "nika:write"]
+  fs:
+    read:
+      - "examples/fixtures/qr-art-forge/art"          # the glob walks this directory
+      - "examples/fixtures/qr-art-forge/art/*.png"
+      - "examples/fixtures/qr-art-forge/scene.png"
+      - "out/qr-art-forge/poster-*.png"               # the rescan and the contact sheet read the exports
+    write:
+      - "out/qr-art-forge/design-scores.svg"
+      - "out/qr-art-forge/manifest.json"
+      - "out/qr-art-forge/poster-print.png"
+      - "out/qr-art-forge/poster-square.png"
+      - "out/qr-art-forge/poster-story.png"
+      - "out/qr-art-forge/poster-thumb.png"
+      - "out/qr-art-forge/rejected.json"
+      - "out/qr-art-forge/run-report.json"
+      - "out/qr-art-forge/sheet.png"
+
+tasks:
+  # ══ GATHER · one yes, then the codes and the clock ════════════════════
+  # The one gate, at the root. qrscan's output is content this file did
+  # not write, and an `exec:` grant can reach anything (spec 10 §the lethal
+  # trifecta), so a person's yes must come before every path that leads
+  # to a program or a written file. Every task below reads it.
+  approve:
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: confirm
+        message: |
+          Scan the art codes under examples/fixtures/qr-art-forge/art/ with
+          qrscan (a local program, nothing is uploaded), then write the
+          poster set under out/qr-art-forge/?
+
+  started:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:date"
+      args: { op: now }
+
+  # Sorted lexicographically (stdlib §nika:glob) · variant-1 to -5 keep
+  # their order through the scan.
+  found:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:glob"
+      args: { pattern: "${{ const.art_glob }}" }
+
+  # ══ NORMALIZE · scan, then trust the JSON only once it is checked ══════
+  scan:
+    with:
+      go: ${{ tasks.approve.output }}
+      found: ${{ tasks.found.output }}
+    when: ${{ with.go == true && with.found != null && size(with.found) > 0 }}
+    for_each:
+      items: ${{ with.found }}
+      max_items: 24
+      max_parallel: 3
+      fail_fast: false
+    on_error:
+      # qrscan exits 1 when it finds no code and 2 when it cannot read the
+      # file (measured on 0.9.0) · either way the code is unreadable: null.
+      recover: null
+    exec:
+      command: ["qrscan", "--score-preset", "design", "--", "${{ item }}"]
+      decode: json
+
+  scans_ok:
+    with:
+      go: ${{ tasks.approve.output }}
+      scans: ${{ tasks.scan.output }}
+    when: ${{ with.go == true && with.scans != null }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.scans }}"
+        schema:
+          type: array
+          items:
+            anyOf:
+              - { type: "null" }
+              - type: object
+                required: [detections, score]
+                properties:
+                  detections:
+                    type: array
+                    items:
+                      type: object
+                      required: [content]
+                      properties:
+                        content:
+                          type: object
+                          required: [text]
+                          properties: { text: { type: string } }
+                  score:
+                    anyOf:
+                      - { type: "null" }
+                      - type: object
+                        required: [value, grade]
+                        properties:
+                          value: { type: number, minimum: 0, maximum: 100 }
+                          grade: { type: string }
+
+  # ══ JUDGE · exact text AND the floor, ranked ═══════════════════════════
+  verdicts:
+    with:
+      go: ${{ tasks.approve.output }}
+      found: ${{ tasks.found.output }}
+      scans: ${{ tasks.scan.output }}
+      checked: ${{ tasks.scans_ok.output }}
+    when: ${{ with.go == true && with.checked != null && with.checked.valid == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          url: "${{ inputs.target_url }}"
+          floor: "${{ const.design_floor }}"
+          paths: "${{ with.found }}"
+          scans: "${{ with.scans }}"
+        expression: >-
+          .url as $u | .floor as $f
+          | ([.paths, .scans] | transpose | map({
+              variant: (.[0] | split("/") | last | rtrimstr(".png")),
+              path: .[0],
+              decoded: (.[1].detections[0].content.text // null),
+              score: (.[1].score.value // 0),
+              grade: (.[1].score.grade // "unreadable"),
+              hints: (.[1].hints // [])
+            }
+            | . + {exact: (.decoded == $u)}
+            | . + {kept: (.exact and .score >= $f),
+                   why: (if .decoded == null then "does not decode"
+                         elif (.exact | not) then "decodes to another link"
+                         elif .score < $f then "decodes, scores under the floor"
+                         else "kept" end)})
+            | sort_by(0 - .score)) as $ranked
+          | {
+              ranked: $ranked,
+              kept: [$ranked[] | select(.kept)],
+              rejected: [$ranked[] | select(.kept | not) | {variant, decoded, score, grade, why}],
+              best: ([$ranked[] | select(.kept)] | first // null),
+              chart: ($ranked | map({variant, score})),
+              chartable: ([$ranked[].score] | unique | length > 1)
+            }
+
+  # A chart needs two different scores · one value everywhere (qrscan
+  # missing, every code unreadable) is a collapsed axis, NIKA-BUILTIN-CHART-005.
+  score_chart:
+    with:
+      go: ${{ tasks.approve.output }}
+      v: ${{ tasks.verdicts.output }}
+    when: ${{ with.go == true && with.v != null && with.v.chartable == true }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.v.chart }}"
+        semantics: { variant: category }
+        chart: { type: bar, x: variant, y: score, title: "qrscan design score per variant (floor 70)" }
+        out: "out/qr-art-forge/design-scores.svg"
+
+  # Branch one · the codes a designer should fix, and why.
+  rejected:
+    with:
+      go: ${{ tasks.approve.output }}
+      v: ${{ tasks.verdicts.output }}
+    when: ${{ with.go == true && with.v != null && size(with.v.rejected) > 0 }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/qr-art-forge/rejected.json"
+        content: "${{ with.v.rejected }}"
+        create_dirs: true
+
+  # ══ ACT · branch two, the best code on the scene ═══════════════════════
+  # Print master · scene over code, each fitted in an 1800×1600 cell, so
+  # the canvas is 1800×3200 (9:16).
+  print:
+    with:
+      go: ${{ tasks.approve.output }}
+      v: ${{ tasks.verdicts.output }}
+    when: ${{ with.go == true && with.v != null && with.v.best != null }}
+    invoke:
+      tool: "nika:image_compose"
+      args:
+        inputs: ["${{ const.scene }}", "${{ with.v.best.path }}"]
+        out: "out/qr-art-forge/poster-print.png"
+        layout: column
+        scale: fit
+        cell: { width: 1800, height: 1600 }
+        background: "#ffffff"
+
+  square:
+    with:
+      go: ${{ tasks.approve.output }}
+      v: ${{ tasks.verdicts.output }}
+    when: ${{ with.go == true && with.v != null && with.v.best != null }}
+    invoke:
+      tool: "nika:image_compose"
+      args:
+        inputs: ["${{ const.scene }}", "${{ with.v.best.path }}"]
+        out: "out/qr-art-forge/poster-square.png"
+        layout: row
+        scale: fit
+        cell: { width: 540, height: 1080 }
+        background: "#ffffff"
+
+  story:
+    with:
+      go: ${{ tasks.approve.output }}
+      print: ${{ tasks.print.output }}
+    when: ${{ with.go == true && with.print != null }}
+    invoke:
+      tool: "nika:image_fx"
+      args:
+        input: "out/qr-art-forge/poster-print.png"
+        out: "out/qr-art-forge/poster-story.png"
+        ops: [ { resize: { width: 1080 } } ]
+
+  # The smallest size a feed shows · the size most likely to stop scanning.
+  thumb:
+    with:
+      go: ${{ tasks.approve.output }}
+      square: ${{ tasks.square.output }}
+    when: ${{ with.go == true && with.square != null }}
+    invoke:
+      tool: "nika:image_fx"
+      args:
+        input: "out/qr-art-forge/poster-square.png"
+        out: "out/qr-art-forge/poster-thumb.png"
+        ops: [ { resize: { width: 320 } } ]
+
+  # Every export is scanned again, with all six stress axes. The guard
+  # reads the two resizes, so with no poster this skips (`after: success`
+  # would cancel it, and the report with it).
+  rescan:
+    with:
+      go: ${{ tasks.approve.output }}
+      story: ${{ tasks.story.output }}
+      thumb: ${{ tasks.thumb.output }}
+    when: ${{ with.go == true && with.story != null && with.thumb != null }}
+    for_each:
+      items:
+        - "out/qr-art-forge/poster-print.png"
+        - "out/qr-art-forge/poster-story.png"
+        - "out/qr-art-forge/poster-square.png"
+        - "out/qr-art-forge/poster-thumb.png"
+      max_parallel: 2
+      fail_fast: false
+    on_error:
+      recover: null
+    exec:
+      command: ["qrscan", "--score-preset", "capture", "--", "${{ item }}"]
+      decode: json
+
+  exports:
+    with:
+      go: ${{ tasks.approve.output }}
+      scans: ${{ tasks.rescan.output }}
+      v: ${{ tasks.verdicts.output }}
+    when: ${{ with.go == true && with.scans != null && with.v != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          url: "${{ inputs.target_url }}"
+          floor: "${{ const.capture_floor }}"
+          best: "${{ with.v.best }}"
+          names: "${{ const.exports }}"
+          scans: "${{ with.scans }}"
+        expression: >-
+          .url as $u | .floor as $f | .best as $b
+          | ([.names, .scans] | transpose
+             | map({
+                 export: .[0],
+                 path: "out/qr-art-forge/poster-\(.[0]).png",
+                 decoded: (.[1].detections[0].content.text // null),
+                 score: (.[1].score.value // 0),
+                 grade: (.[1].score.grade // "unreadable"),
+                 failed_axes: [(.[1].score.axes // [])[] | select(.failed_at != null) | "\(.axis) at \(.failed_at)"]
+               } | . + {passes: (.decoded == $u and .score >= $f)})) as $rows
+          | {rows: $rows, sheet: ([$b.path] + ($rows | map(.path)))}
+
+  # The contact sheet · the winning code, then the four exports.
+  sheet:
+    with:
+      go: ${{ tasks.approve.output }}
+      exports: ${{ tasks.exports.output }}
+    when: ${{ with.go == true && with.exports != null }}
+    invoke:
+      tool: "nika:image_compose"
+      args:
+        inputs: "${{ with.exports.sheet }}"
+        out: "out/qr-art-forge/sheet.png"
+        scale: fit
+        cell: { width: 360, height: 360 }
+        gap: 12
+        padding: 24
+        background: "#ffffff"
+
+  # ══ REPORT · the manifest, its fingerprint, the run's own record ═══════
+  manifest:
+    with:
+      go: ${{ tasks.approve.output }}
+      started: ${{ tasks.started.output }}
+      v: ${{ tasks.verdicts.output }}
+      exports: ${{ tasks.exports.output }}
+      sheet: ${{ tasks.sheet.output }}
+    when: ${{ with.go == true && with.v != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          url: "${{ inputs.target_url }}"
+          started: "${{ with.started }}"
+          v: "${{ with.v }}"
+          exports: "${{ with.exports }}"
+          sheet: "${{ with.sheet }}"
+        expression: >-
+          {
+            target_url: .url,
+            started: .started,
+            variants: (.v.ranked | map({variant, decoded, score, grade, kept, why})),
+            best: (.v.best.variant // null),
+            exports: ((.exports.rows // []) | map({export, path, score, grade, passes, failed_axes})),
+            sheet: (.sheet.path // null)
+          }
+
+  fingerprint:
+    with:
+      go: ${{ tasks.approve.output }}
+      manifest: ${{ tasks.manifest.output }}
+    when: ${{ with.go == true && with.manifest != null }}
+    invoke:
+      tool: "nika:hash"
+      args: { content: "${{ with.manifest }}", algo: sha256 }
+
+  save_manifest:
+    with:
+      go: ${{ tasks.approve.output }}
+      manifest: ${{ tasks.manifest.output }}
+    when: ${{ with.go == true && with.manifest != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/qr-art-forge/manifest.json"
+        content: "${{ with.manifest }}"
+        create_dirs: true
+
+  cost:
+    after: { rejected: terminal, score_chart: terminal, save_manifest: terminal }
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  report:
+    with:
+      go: ${{ tasks.approve.output }}
+      cost: ${{ tasks.cost.output }}
+      v: ${{ tasks.verdicts.output }}
+      exports: ${{ tasks.exports.output }}
+      sha: ${{ tasks.fingerprint.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          v: "${{ with.v }}"
+          exports: "${{ with.exports }}"
+          sha: "${{ with.sha }}"
+          cost: "${{ with.cost }}"
+        expression: >-
+          {
+            counts: {
+              scanned: ((.v.ranked // []) | length),
+              kept: ((.v.kept // []) | length),
+              rejected: ((.v.rejected // []) | length),
+              exports_passing: ((.exports.rows // []) | map(select(.passes)) | length),
+              exports_failing: ((.exports.rows // []) | map(select(.passes | not)) | length)
+            },
+            decision: (if .v == null then "no scan could be trusted · nothing composed"
+                       elif .v.best == null then "no code kept · nothing composed"
+                       else "\(.v.best.variant) on the posters" end),
+            rejected: (.v.rejected // []),
+            manifest_sha256: .sha,
+            cost
+          }
+
+  save_report:
+    with:
+      go: ${{ tasks.approve.output }}
+      report: ${{ tasks.report.output }}
+    when: ${{ with.go == true && with.report != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/qr-art-forge/run-report.json"
+        content: "${{ with.report }}"
+        create_dirs: true
+
+outputs:
+  best:
+    value: ${{ tasks.verdicts.output }}
+    description: "Every code ranked by design score, the kept ones, the rejected ones with the reason, and the best"
+  report:
+    value: ${{ tasks.report.output }}
+    description: "Counts per branch, the decision, the manifest's sha256 and the run's cost"

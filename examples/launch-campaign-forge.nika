@@ -1,0 +1,575 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · marketing
+#
+# One product brief becomes a launch campaign. The landing copy comes back
+# as a bounded schema; every locale gets its own headline and meta
+# description; jq builds one tracked link per locale and checks every
+# length; the QR Code AI API draws one art QR per link; Codex draws the
+# hero image; and one manifest gathers it all under
+# out/launch-campaign-forge/. One person's yes publishes the manifest to
+# the CMS.
+#
+# Demonstrates ·
+#   - `run.access` over ACP · every infer and the agent ride one Codex
+#     session; the agent saves its picture with `images.save`
+#   - typed copy · `infer.schema:` on the landing copy, the five locale
+#     variants and the three channel posts
+#   - the law in jq · lengths against `const.limits`, tracked links built
+#     from the inputs alone, credits computed before any paid call; the law
+#     is proven on hand-computed cases and `nika:assert`ed with the budget
+#   - two branches · copy that fails a length rule lands in
+#     qa-failures.json and stops the run before any paid call; QR codes
+#     the API refused stay in the manifest as labelled holes
+#   - the API key rides `secrets:` with one sanctioned sink per use
+#   - one confirm gate, where the manifest leaves the machine; the POST
+#     tests the yes itself and carries an idempotency key (`nika:hash`)
+#   - `nika:uuid`, `nika:date`, `nika:convert` to CSV, `nika:chart`,
+#     `nika:inspect` in the report
+#
+# Needs · a Codex seat over ACP (`nika doctor` lists it) and QRCAI_API in
+#   the environment: a QR Code AI API key, 12 credits per art code, so
+#   the five sample locales plan 60 credits under `max_credits: 60`.
+#   Publishing needs the `publish` URL pointed at your CMS, with its host
+#   in `permits.net.http` and in the secret's `egress:`; cms.example.com
+#   is a reserved example host.
+#
+# Run · nika run examples/launch-campaign-forge.nika
+#   This file cannot run offline (CONVENTIONS §6): an ACP seat refuses
+#   `--model mock/echo` (NIKA-1801, exit 3), and the QR step spends real
+#   credits. `nika check` is its offline proof. Unattended, the publish
+#   gate takes its `default: false` and nothing leaves; answer it with
+#   `--answer approve=true` to publish. Clean up ·
+#   rm -rf out/launch-campaign-forge
+
+nika: launch-campaign-forge
+
+model: openai/gpt-5.2            # the model the Codex seat serves
+
+run:
+  access: { via: codex, protocol: acp }   # one route · no per-task `max_tokens` on this seat (NIKA-432)
+  clock: system                           # `publish` declares a `timeout:`
+
+inputs:
+  product:
+    type: string
+    default: "Fernleaf, a refillable glass kettle with a tea basket"
+    description: "What is launching, in one line"
+  audience:
+    type: string
+    default: "people who brew loose-leaf tea at home"
+    description: "Who the copy speaks to"
+  landing_url:
+    type: string
+    default: "https://example.com/fernleaf"
+    description: "The landing page every tracked link points to"
+  campaign:
+    type: string
+    default: "fernleaf-launch"
+    description: "utm_campaign value, lowercase and hyphens"
+  locales:
+    type: { array: string }
+    default: ["en-GB", "fr-FR", "de-DE", "es-ES", "it-IT"]
+    description: "One headline, meta description, tracked link and QR per locale"
+  qr_style:
+    type: string
+    default: "soft watercolour tea leaves and steam, pale green and cream"
+    description: "The art direction sent to the QR API"
+  max_credits:
+    type: integer
+    default: 60
+    description: "QR API credits this run may plan · checked before the first call"
+
+const:
+  credits_per_code: 12
+  # Hard limits, in characters · a search result truncates a longer meta
+  # description, a channel refuses a longer post.
+  limits: { headline: 60, meta_description: 155 }
+  channels:
+    - { id: microblog, max_chars: 280 }
+    - { id: professional, max_chars: 700 }
+    - { id: photo, max_chars: 2200 }
+  # The length law on cases checked by hand · a 61-character headline
+  # fails, and so does a post whose text (254 characters) fits until its
+  # link and hashtags take it to 357. The short post (111) passes.
+  law_cases:
+    locales:
+      - { locale: ok, headline: "Brew it slow", meta_description: "A short meta description." }
+      - { locale: long, headline: "Sixty-one characters is one more than this limit allows, see?", meta_description: "Fine." }
+    posts:
+      - { channel: microblog, max_chars: 280, link: "https://example.com/fernleaf?utm_source=microblog&utm_medium=social&utm_campaign=law-case", text: "Short and sweet.", hashtags: ["tea"] }
+      - { channel: microblog, max_chars: 280, link: "https://example.com/fernleaf?utm_source=microblog&utm_medium=social&utm_campaign=law-case", text: "About two hundred and fifty characters of text that look fine on their own, until the tracked link and the hashtags are added at the end of the post, which is exactly the moment a channel would refuse it, so the law has to count all three parts together.", hashtags: ["tea", "launch"] }
+    expect: { failed_locales: ["long"], failed_posts: [1] }
+
+secrets:
+  qrcai_api:
+    source: env
+    key: QRCAI_API
+    egress:
+      # The key itself goes to the API host only. What the API answers (the
+      # image URLs) is authenticated content: it may reach the manifest,
+      # its CSV, its fingerprint, the gate's message, the report and the
+      # CMS, and nowhere else.
+      - to: "nika:fetch"
+        host: "qrcode-ai.com"
+      - to: "nika:fetch"
+        host: "cms.example.com"
+      - to: "nika:jq"
+      - to: "nika:convert"
+      - to: "nika:hash"
+      - to: "nika:prompt"
+      - to: "nika:write"
+      - to: "outputs"
+
+permits:
+  tools: ["nika:assert", "nika:chart", "nika:convert", "nika:date", "nika:fetch", "nika:hash", "nika:inspect", "nika:jq", "nika:prompt", "nika:uuid", "nika:write"]
+  net:
+    http: ["qrcode-ai.com", "cms.example.com"]
+  fs:
+    write:
+      - "out/launch-campaign-forge/copy-lengths.svg"
+      - "out/launch-campaign-forge/hero.png"
+      - "out/launch-campaign-forge/hero-2.png"   # images.save numbers any extra picture
+      - "out/launch-campaign-forge/hero-3.png"
+      - "out/launch-campaign-forge/hero-4.png"
+      - "out/launch-campaign-forge/locales.csv"
+      - "out/launch-campaign-forge/manifest.json"
+      - "out/launch-campaign-forge/publish-receipt.json"
+      - "out/launch-campaign-forge/qa-failures.json"
+      - "out/launch-campaign-forge/run-report.json"
+
+tasks:
+  # ══ GATHER · an id, a clock, the plan ══════════════════════════════════
+  campaign_id:
+    invoke:
+      tool: "nika:uuid"
+      args: { version: v7 }
+
+  started:
+    invoke:
+      tool: "nika:date"
+      args: { op: now }
+
+  # Tracked links and the credit plan come from the inputs alone.
+  links:
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          url: "${{ inputs.landing_url }}"
+          campaign: "${{ inputs.campaign }}"
+          locales: "${{ inputs.locales }}"
+          per_code: "${{ const.credits_per_code }}"
+        expression: >-
+          .url as $u | .campaign as $c | .per_code as $p
+          | {
+              rows: (.locales | map({
+                locale: .,
+                url: "\($u)?utm_source=qr&utm_medium=print&utm_campaign=\($c)&utm_content=\(. | ascii_downcase)"
+              })),
+              credits: ((.locales | length) * $p)
+            }
+
+  # ══ NORMALIZE · the copy, typed ════════════════════════════════════════
+  landing:
+    infer:
+      prompt: |
+        Write landing page copy for ${{ inputs.product }}, for
+        ${{ inputs.audience }}. Plain words, no superlatives, no prices.
+        The headline stays under 60 characters, the meta description
+        under 155.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [headline, subhead, bullets, cta, meta_description]
+        properties:
+          headline: { type: string, maxLength: 120 }
+          subhead: { type: string, maxLength: 240 }
+          bullets: { type: array, minItems: 3, maxItems: 3, items: { type: string, maxLength: 160 } }
+          cta: { type: string, maxLength: 40 }
+          meta_description: { type: string, maxLength: 320 }
+
+  localized:
+    with:
+      landing: ${{ tasks.landing.output }}
+    for_each:
+      items: ${{ inputs.locales }}
+      max_items: 12
+      max_parallel: 3
+    infer:
+      prompt: |
+        Adapt this headline and meta description for the ${{ item }}
+        market. Adapt, do not translate word for word. Keep the headline
+        under 60 characters and the meta description under 155.
+        Headline · ${{ with.landing.headline }}
+        Meta description · ${{ with.landing.meta_description }}
+      schema:
+        type: object
+        additionalProperties: false
+        required: [headline, meta_description]
+        properties:
+          headline: { type: string, maxLength: 120 }
+          meta_description: { type: string, maxLength: 320 }
+
+  posts:
+    with:
+      landing: ${{ tasks.landing.output }}
+    for_each:
+      items: ${{ const.channels }}
+      max_items: 6
+      max_parallel: 3
+    infer:
+      prompt: |
+        Write one launch post for the ${{ item.id }} channel about
+        ${{ inputs.product }}. The post, two or three hashtags and a link
+        must fit in ${{ item.max_chars }} characters together, so leave
+        about 110 characters for the link and the hashtags. No link in
+        the text; it is added after.
+        Headline · ${{ with.landing.headline }}
+      schema:
+        type: object
+        additionalProperties: false
+        required: [text, hashtags]
+        properties:
+          text: { type: string, maxLength: 2200 }
+          hashtags: { type: array, maxItems: 3, items: { type: string, pattern: "^[a-z0-9]+$" } }
+
+  # ══ JUDGE · lengths and the budget, in jq ══════════════════════════════
+  # One law, two cases · [0] this run's copy, [1] const.law_cases.
+  cases:
+    with:
+      localized: ${{ tasks.localized.output }}
+      posts: ${{ tasks.posts.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          locales: "${{ inputs.locales }}"
+          localized: "${{ with.localized }}"
+          posts: "${{ with.posts }}"
+          channels: "${{ const.channels }}"
+          url: "${{ inputs.landing_url }}"
+          campaign: "${{ inputs.campaign }}"
+          known: "${{ const.law_cases }}"
+        expression: >-
+          .url as $u | .campaign as $c
+          | [{locales: ([.locales, .localized] | transpose | map({locale: .[0]} + .[1])),
+              posts: ([.channels, .posts] | transpose | map({
+                channel: .[0].id, max_chars: .[0].max_chars,
+                link: "\($u)?utm_source=\(.[0].id)&utm_medium=social&utm_campaign=\($c)"} + .[1]))},
+             {locales: .known.locales, posts: .known.posts}]
+
+  law:
+    with:
+      cases: ${{ tasks.cases.output }}
+    for_each:
+      items: ${{ with.cases }}
+      max_items: 2
+      max_parallel: 2
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          case: "${{ item }}"
+          limits: "${{ const.limits }}"
+        expression: >-
+          .limits as $l
+          | (.case.locales | map(. + {
+              headline_chars: (.headline | length),
+              meta_chars: (.meta_description | length)}
+              | . + {ok: (.headline_chars <= $l.headline and .meta_chars <= $l.meta_description)})) as $loc
+          | (.case.posts | to_entries | map(.key as $i | .value
+              | (.text + " " + .link + " " + (.hashtags | map("#" + .) | join(" "))) as $full
+              | . + {index: $i, full: $full, chars: ($full | length)}
+              | . + {ok: (.chars <= .max_chars)})) as $posts
+          | {
+              locales: $loc,
+              posts: $posts,
+              failed_locales: [$loc[] | select(.ok | not) | .locale],
+              failed_posts: [$posts[] | select(.ok | not) | .index],
+              chart: ($loc | map({locale, headline_chars}))
+            }
+          | . + {all_ok: ((.failed_locales | length) == 0 and (.failed_posts | length) == 0)}
+
+  # The law still fails what it must, and the plan fits the budget, before
+  # the first paid call.
+  proven:
+    with:
+      law: ${{ tasks.law.output }}
+      links: ${{ tasks.links.output }}
+    when: ${{ with.law != null }}
+    invoke:
+      tool: "nika:assert"
+      args:
+        condition: ${{ with.law[1].failed_locales == const.law_cases.expect.failed_locales && with.law[1].failed_posts == const.law_cases.expect.failed_posts && with.links.credits <= inputs.max_credits }}
+        message: "the length law no longer fails const.law_cases as expected, or the QR plan needs more than max_credits"
+
+  # Branch one · copy that breaks a limit, for a person to fix.
+  qa_failures:
+    with:
+      law: ${{ tasks.law.output }}
+    when: ${{ with.law != null && with.law[0].all_ok == false }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/launch-campaign-forge/qa-failures.json"
+        content: { locales: "${{ with.law[0].failed_locales }}", posts: "${{ with.law[0].failed_posts }}", detail: "${{ with.law[0] }}" }
+        create_dirs: true
+
+  length_chart:
+    with:
+      law: ${{ tasks.law.output }}
+    when: ${{ with.law != null }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.law[0].chart }}"
+        semantics: { locale: category }
+        chart: { type: bar, x: locale, y: headline_chars, title: "Headline length per locale (limit 60)" }
+        out: "out/launch-campaign-forge/copy-lengths.svg"
+
+  # ══ ACT · the paid pictures, then the manifest ═════════════════════════
+  # Only for copy that passed every length rule · nothing is paid for a
+  # campaign that cannot ship. 12 credits per code, planned and asserted
+  # above. A POST without an idempotency key is never retried
+  # (NIKA-SEC-016): a refused or failed call becomes a labelled hole, not
+  # a second charge.
+  qr:
+    with:
+      proof: ${{ tasks.proven.status }}   # a status read admits a failed proof, so the report still runs
+      law: ${{ tasks.law.output }}
+      links: ${{ tasks.links.output }}
+    when: ${{ with.proof == "success" && with.law != null && with.law[0].all_ok == true }}
+    for_each:
+      items: ${{ with.links.rows }}
+      max_items: 12
+      max_parallel: 2
+      fail_fast: false
+    invoke:
+      tool: "nika:fetch"
+      args:
+        url: "https://qrcode-ai.com/api/qrcode"   # literal · a secret header needs a static host
+        method: POST
+        headers:
+          x-api-key: "${{ secrets.qrcai_api }}"
+        body: { to: "${{ item.url }}", type: "url", prompt: "${{ inputs.qr_style }}" }
+        mode: jq
+        jq: "{image_url: (.qrcode.image.url // .qrcode.url // .qrcode.sizes[0].url // null)}"
+    on_error:
+      # 401 bad key · 421 out of credits · 429 slow down · or no network.
+      recover: { image_url: null, note: "not generated · see this task's error in the trace" }
+
+  hero:
+    with:
+      proof: ${{ tasks.proven.status }}
+      law: ${{ tasks.law.output }}
+      landing: ${{ tasks.landing.output }}
+    when: ${{ with.proof == "success" && with.law != null && with.law[0].all_ok == true }}
+    on_error:
+      recover: null               # no picture on the session · the manifest says so
+    agent:
+      prompt: |
+        Draw one hero image for a product launch page. The product:
+        ${{ inputs.product }}. The page headline: ${{ with.landing.headline }}.
+        Soft daylight, a calm kitchen table, room on the left for text.
+        No words, no letters, no logos, no QR code.
+      images:
+        save: "out/launch-campaign-forge/hero.png"
+
+  manifest:
+    with:
+      id: ${{ tasks.campaign_id.output }}
+      started: ${{ tasks.started.output }}
+      landing: ${{ tasks.landing.output }}
+      law: ${{ tasks.law.output }}
+      links: ${{ tasks.links.output }}
+      qr: ${{ tasks.qr.output }}
+      hero: ${{ tasks.hero.output }}
+    when: ${{ with.law != null && with.qr != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          id: "${{ with.id }}"
+          started: "${{ with.started }}"
+          product: "${{ inputs.product }}"
+          landing: "${{ with.landing }}"
+          law: "${{ with.law[0] }}"
+          links: "${{ with.links }}"
+          qr: "${{ with.qr }}"
+          hero: "${{ with.hero }}"
+        expression: >-
+          {
+            campaign_id: .id,
+            created: .started,
+            product: .product,
+            landing: .landing,
+            hero_image: (.hero | if type == "object" then (.images[0].path // null) else null end),
+            locales: ([.links.rows, .law.locales, .qr] | transpose | map({
+              locale: .[0].locale, url: .[0].url,
+              headline: .[1].headline, meta_description: .[1].meta_description, copy_ok: .[1].ok,
+              qr_image_url: .[2].image_url})),
+            posts: (.law.posts | map({channel, text: .full, chars, max_chars, ok})),
+            credits_planned: .links.credits,
+            qr_generated: ([.qr[] | select(.image_url != null)] | length),
+            ready: .law.all_ok
+          }
+
+  save_manifest:
+    with:
+      manifest: ${{ tasks.manifest.output }}
+    when: ${{ with.manifest != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/launch-campaign-forge/manifest.json"
+        content: "${{ with.manifest }}"
+        create_dirs: true
+
+  # A spreadsheet opens this · `formula_guard` keeps model text inert.
+  locales_csv:
+    with:
+      manifest: ${{ tasks.manifest.output }}
+    when: ${{ with.manifest != null }}
+    invoke:
+      tool: "nika:convert"
+      args:
+        input: "${{ with.manifest.locales }}"
+        from: json
+        to: csv
+        columns: [locale, headline, meta_description, copy_ok, url, qr_image_url]
+        formula_guard: true
+
+  save_csv:
+    with:
+      csv: ${{ tasks.locales_csv.output }}
+    when: ${{ with.csv != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/launch-campaign-forge/locales.csv"
+        content: "${{ with.csv }}"
+        create_dirs: true
+
+  # The same manifest gives the same key, so a retried or repeated publish
+  # is one campaign for the CMS.
+  fingerprint:
+    with:
+      manifest: ${{ tasks.manifest.output }}
+    when: ${{ with.manifest != null }}
+    invoke:
+      tool: "nika:hash"
+      args: { content: "${{ with.manifest }}", algo: sha256 }
+
+  # The one gate · the only step that leaves the machine without a
+  # credit plan behind it. Unattended it answers `default: false`.
+  approve:
+    with:
+      manifest: ${{ tasks.manifest.output }}
+    when: ${{ with.manifest != null && with.manifest.ready == true }}
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: confirm
+        message: |
+          Publish campaign ${{ with.manifest.campaign_id }} to the CMS?
+          ${{ size(with.manifest.locales) }} locales, ${{ with.manifest.qr_generated }} QR codes,
+          ${{ size(with.manifest.posts) }} posts · out/launch-campaign-forge/manifest.json
+        default: false
+
+  publish:
+    with:
+      go: ${{ tasks.approve.output }}
+      manifest: ${{ tasks.manifest.output }}
+      key: ${{ tasks.fingerprint.output }}
+    when: ${{ with.go == true && with.manifest != null && with.key != null }}
+    timeout: "30s"
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      jitter: true
+    invoke:
+      tool: "nika:fetch"
+      args:
+        url: "https://cms.example.com/api/campaigns"   # literal · authenticated content needs a static host
+        method: POST
+        headers:
+          idempotency-key: "${{ with.key }}"
+        body: "${{ with.manifest }}"
+        mode: raw
+        response: { accept: [200, 201, 409] }   # 409 · the CMS already holds this campaign
+    on_error:
+      skip: true                  # the error stays at tasks.publish.error · nothing is retried blind
+
+  # Only on a yes · what happened to the publish, next to the key it used.
+  receipt:
+    with:
+      go: ${{ tasks.approve.output }}
+      status: ${{ tasks.publish.status }}
+      key: ${{ tasks.fingerprint.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/launch-campaign-forge/publish-receipt.json"
+        content: { idempotency_key: "${{ with.key }}", publish: "${{ with.status }}" }
+        create_dirs: true
+
+  # ══ REPORT · every branch settles, then the run reads itself ═══════════
+  cost:
+    after: { qa_failures: terminal, length_chart: terminal, save_manifest: terminal, save_csv: terminal }
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  report:
+    with:
+      cost: ${{ tasks.cost.output }}
+      law: ${{ tasks.law.output }}
+      links: ${{ tasks.links.output }}
+      manifest: ${{ tasks.manifest.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          law: "${{ with.law }}"
+          links: "${{ with.links }}"
+          manifest: "${{ with.manifest }}"
+          cost: "${{ with.cost }}"
+        expression: >-
+          (.law // [] | .[0]) as $t
+          | {
+              counts: {
+                locales: (($t.locales // []) | length),
+                locales_failing: (($t.failed_locales // []) | length),
+                posts: (($t.posts // []) | length),
+                posts_failing: (($t.failed_posts // []) | length),
+                qr_generated: (.manifest.qr_generated // 0)
+              },
+              credits_planned: .links.credits,
+              hero_image: (.manifest.hero_image // null),
+              decision: (if $t == null then "no copy to judge"
+                         elif $t.all_ok != true then "copy failed a length rule · see qa-failures.json · nothing paid for, nothing offered"
+                         elif .manifest == null then "no manifest · the law's proof or the credit budget failed · nothing paid for"
+                         else "offered for publishing · the outcome is in publish-receipt.json" end),
+              cost
+            }
+
+  save_report:
+    with:
+      report: ${{ tasks.report.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/launch-campaign-forge/run-report.json"
+        content: "${{ with.report }}"
+        create_dirs: true
+
+outputs:
+  manifest:
+    value: ${{ tasks.manifest.output }}
+    description: "The campaign · landing copy, per-locale copy, links and QR image URLs, posts with their length verdicts, the hero path"
+  report:
+    value: ${{ tasks.report.output }}
+    description: "Counts per branch, the credit plan, whether the campaign was offered for publishing, and the run's cost"

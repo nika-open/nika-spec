@@ -37,6 +37,85 @@ engine at its next `SPEC_PIN` bump.
   admitted) and `envelope/sec-exec-shell-recursive-delete-spelling`
   (`rm -fr` on a `shell:` line, refused at run).
 
+### Added · a first pack of recipe jobs (2026-11-24)
+
+- Seventeen job workflows join `examples/`, each with its fixtures under
+  `examples/fixtures/<name>/`: `inbox-triage`, `receipt-ledger`,
+  `lead-enrichment`, `feed-digest`, `docs-answer-desk`,
+  `comfyui-image-chain`, `ci-failure-triage`, `workflow-watchdog`,
+  `listing-link-audit`, `source-to-45-locales`, `seo-site-audit`,
+  `programmatic-seo-pages`, `qr-art-forge`, `launch-campaign-forge`,
+  `quote-compare-decide`, `subscription-renewal-radar` and
+  `refund-chaser`. Each runs 21 to 30 tasks in phases (gather, normalize,
+  judge, act, report), proves its jq law on hand-computed cases before the
+  first model call, keeps state between runs where the job needs it, and
+  writes a `run-report.json` built as a value under `out/<name>/`.
+- Every file checks with `--native-strict` and no finding on engine
+  0.125.0. Sixteen run offline under `--model mock/echo` with the exit their
+  header states; `launch-campaign-forge` declares that it cannot (its Codex
+  seat over ACP refuses the mock, NIKA-1801) and `qr-art-forge` needs the
+  open-source `qrscan` on `PATH`. Some keep the `assert-quarantine` hint.
+- `README-jobs.md` lists them, and `manifest.yaml` carries them.
+
+### Fixed · three authoring claims the recipe pack measured false (2026-11-24)
+
+- `CONVENTIONS.md` §8 said an input with `required: false` and a `default:`
+  is unreachable from `--var`. A `--var` overrides a declared default
+  (01 §inputs), and the engine does so.
+- `CONVENTIONS.md` §9.7 said a red last `nika:assert` quarantines `out/`.
+  Any failed run moves the files it wrote, under `out/` or elsewhere, to
+  `.nika/quarantine/<trace>/`, a red assert anywhere in the DAG or a failed
+  jq task alike; a file a `nika:edit` changed stays in place with its
+  original under `originals/`, and a failure absorbed by `on_error:` moves
+  nothing.
+- `README-jobs.md` advised an `on_error: { recover: … }` sample for every
+  network step. That fits a read. On an effect (a POST, a send) a recovered
+  task settles `success`, so later steps record a send that never happened
+  as done: an effect uses `on_error: { skip: true }` and the steps after it
+  test `tasks.<id>.status`, or its recovery value says it was not sent and
+  is tested.
+
+### Changed · engine 0.125.0 is the current release, and 0.124.5 is recorded (2026-11-24)
+
+- The README, CONTRIBUTING, SECURITY, the QUICKSTART status line and 00
+  §Pre-1.0 stability contract name engine 0.125.0, which embeds this spec
+  at `2edc285`, and say where the project stands: 0.125 is the current
+  release line, and 0.124.x is the previous one. Work stays focused on
+  maintenance, security and the media capabilities workflows need; native
+  video is planned for a later release. 00 gains a dated amendment and
+  keeps the 2026-10-27 one as history, and the README's family table says
+  the frozen editor extension is not qualified with 0.125.
+- The release changes no language rule and keeps machine protocol 2. What
+  it adds to `nika serve` is engine API: the owner and labels a job
+  carries, the listing of jobs, fair admission between owners, a cap on
+  the model calls in flight per provider, the retention of settled jobs
+  and the retry of a job whose run was lost. Its security fixes bind a
+  journaled gate decision to the content it approved, refuse to start an
+  MCP server on a host with no OS sandbox (`NIKA-1710`), credit a `choice`
+  or `input` gate under `NIKA-SEC-009` only when the guarded task tests
+  its answer, and keep the agent kit's shell hook, when the `nika` binary
+  is missing, from refusing commands outside a Nika project.
+- Engine 0.124.5 (2026-11-20), the first engine release published from
+  `nika-open/nika`, embeds `25078e7`, the commit that recorded 0.124.4.
+  It changes no language rule: it moves the engine's addresses to
+  `nika-open` and moves `quinn` past three QUIC advisories. The README,
+  CONTRIBUTING, 00 and 07 name it with the other 0.124 releases.
+- The README's pin example reads engine v0.125.0, and its three commands
+  print `2edc285`. 07 §Editor tooling and `llms.txt` give the `2edc285`
+  schema address for engine 0.125.0. The schema at `2edc285` is the one at
+  `25078e7`, `66dbdd6` and `5a579bc`, byte for byte, and the address
+  serves the same bytes.
+- `timeline/timeline.yaml` gains the dated entries `release-0-124-5`,
+  `release-0-125-0` (published `2026-11-24T16:24:20Z` as release
+  `457015659`, from engine commit `1261da75a`) and
+  `current-release-line-0-125`, proved live by `timeline/verify.py`.
+- `CONFORMANT_IMPLEMENTATIONS.md` gains a 0.125.0 row, measured at
+  `2edc285` with the released macOS arm64 binary, and a 0.124.5 row,
+  measured at `25078e7`. Two runs from fresh checkouts gave identical
+  verdicts, and every fixture keeps the verdict of 0.124.4: static sweep
+  453/460, runtime 126 agree and 9 diverge, lints 7/7, `run.sh` 91 PASS,
+  10 DRIFT, 0 DIVERGENT and 5 BUG.
+
 ### Changed · `NIKA-SEC-009` credits a choice or input gate only where its answer is tested (2026-11-24)
 
 - 05 said any blocking `nika:prompt` (no `default:`) that dominates the

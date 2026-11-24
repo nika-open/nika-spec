@@ -1,0 +1,597 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · procurement / operations
+#
+# Three suppliers answered the same request for quotation, each in their own
+# format and currency. A model copies the terms out of each quote; nothing
+# else is left to it. jq converts, totals and scores them against the RFQ
+# with weights and rules held in `const:`, a person picks the supplier, and
+# the purchase order carries an idempotency key, so a rerun never orders the
+# same quote twice.
+#
+# Demonstrates ·
+#   - extract, then law · `infer.schema:` copies the facts, `nika:validate`
+#     checks each quote before it is trusted, and `nika:jq` does every sum
+#     and the score (CONVENTIONS §9)
+#   - the law proven on every run · one `for_each` runs the same jq over
+#     this run's quotes and over `const.known`, typed and scored by hand;
+#     `nika:assert` compares, and nothing is asked when they differ
+#   - two branches from one validation · rejected quotes land in
+#     review.json, valid ones go on to the decision table
+#   - `nika:date` diff · « still valid on the decision day » is computed
+#     against the RFQ's `decide_by`, never the wall clock, so the sample
+#     decides the same way every day
+#   - `nika:prompt` `mode: choice` · the PO POST tests the answer in its
+#     own `when:`; the choices are the eligible supplier ids plus « none »
+#   - `nika:hash` idempotency keys + a `nika:json_merge_patch` state file ·
+#     an ordered quote is marked at the gate and never sent again
+#   - an effect whose failure must not look like success · `send` uses
+#     `on_error: skip`, not a recover sample (see the task)
+#   - `nika:chart`, a CSV with `formula_guard`, `nika:inspect` in the report
+#
+# Needs · nothing offline. A real run needs ollama serving qwen3.5:4b, and
+#   `const.erp_url` pointed at your ERP with its host in `permits.net.http`.
+#
+# Run · nika run examples/quote-compare-decide.nika --model mock/echo
+#   The mock answers every quote with placeholder facts (« mock » ids and
+#   dates), so validation rejects all three: review.json lists why, the
+#   proof still runs, nothing is asked and nothing is sent.
+#   The whole decision, offline · add `--var rehearse=true`. The facts then
+#   come from `const.known.quotes` (typed from the three sample quotes),
+#   the cheapest quote is ruled out because it expires before `decide_by`,
+#   and `pick` asks. Unattended it takes its `default: "none"`, so nothing
+#   is sent and the state file is not touched. A rehearsal never orders,
+#   whatever the answer.
+#   erp.example.com is a reserved example host (RFC 2606), not an ERP: an
+#   approved order there fails (no such service, or a status outside
+#   `accept`), `send` is skipped with its error kept in the trace, and
+#   nothing is recorded.
+#   Clean up · rm -rf out/quote-compare-decide
+
+nika: quote-compare-decide
+
+# The house seat, a THINKING model: the think block and the JSON both count
+# against `max_tokens` (engine#428), so the extraction ceiling covers both.
+model: ollama/qwen3.5:4b   # local · the quotes never leave the machine
+
+run:
+  clock: system            # `send` declares a `timeout:`
+
+inputs:
+  rehearse:
+    type: bool
+    default: false
+    description: "Judge const.known.quotes instead of the model's extraction · a rehearsal never orders"
+
+const:
+  rfq_path: "examples/fixtures/quote-compare-decide/rfq.yaml"
+  quotes_glob: "examples/fixtures/quote-compare-decide/quote-*.txt"
+  state_path: "out/quote-compare-decide/sent-keys.json"
+  erp_url: "https://erp.example.com/api/purchase-orders"
+  # Fixed example rates into the RFQ currency · pin your own rate source.
+  fx_to_eur: { EUR: 1.0, USD: 0.92, GBP: 1.17 }
+  # The score · 70 points for cost (cheapest eligible total = 70), 20 for
+  # lead time (linear, 0 at the RFQ's limit), 10 for payment terms.
+  weights: { cost: 0.7, lead: 0.2, terms: 0.1 }
+  terms_score: { prepaid: 0, net30: 60, net45: 80, net60: 100 }
+  # A minimum order may exceed the RFQ quantity, up to this ratio.
+  max_moq_ratio: 2
+  # The known answer · the three sample quotes typed by hand, their days of
+  # validity on 2026-12-01, and the scores worked out on paper:
+  #   a · 6000 x 0.84 EUR = 5040 EUR · 70 + 20 x 7/21 + 6 = 82.7
+  #   b · 10000 (its minimum) x 0.81 USD = 7452 EUR · 47.3 + 10.5 + 10 = 67.8
+  #   c · cheapest (4633 EUR), but it expires 3 days before the decision
+  # `proven` asserts the law gives `expect`. `--var rehearse=true` also
+  # judges these quotes in place of the model's extraction.
+  known:
+    rfq: { quantity: 6000, need_within_days: 21 }
+    quotes:
+      - { id: a, supplier: "Saltmarsh Components", quote_id: "SC-4471", unit_price: 0.84, currency: EUR, minimum_order: 5000, lead_time_days: 14, payment_terms: net30, valid_until: "2026-12-31" }
+      - { id: b, supplier: "Quillfield Industrial", quote_id: "QI-2026-0932", unit_price: 0.81, currency: USD, minimum_order: 10000, lead_time_days: 10, payment_terms: net60, valid_until: "2027-01-15" }
+      - { id: c, supplier: "Lumen & Vale Packaging", quote_id: "LV/0458", unit_price: 0.66, currency: GBP, minimum_order: 2500, lead_time_days: 18, payment_terms: net45, valid_until: "2026-11-28" }
+    days: [30, 45, -3]
+    expect: { winner: a, scores: { a: 82.7, b: 67.8 } }
+
+permits:
+  tools: ["nika:assert", "nika:chart", "nika:convert", "nika:date", "nika:fetch", "nika:glob", "nika:hash", "nika:inspect", "nika:jq", "nika:json_merge_patch", "nika:prompt", "nika:read", "nika:validate", "nika:write"]
+  net:
+    http: ["erp.example.com"]   # the one host an order may reach · move it with const.erp_url
+  fs:
+    read:
+      - "examples/fixtures/quote-compare-decide"             # the glob walks this directory
+      - "examples/fixtures/quote-compare-decide/quote-*.txt"
+      - "examples/fixtures/quote-compare-decide/rfq.yaml"
+      - "out/quote-compare-decide/sent-keys.json"   # last run's state · the same path is written below
+    write:
+      - "out/quote-compare-decide/decision-table.csv"
+      - "out/quote-compare-decide/review.json"
+      - "out/quote-compare-decide/run-report.json"
+      - "out/quote-compare-decide/sent-keys.json"
+      - "out/quote-compare-decide/total-cost.svg"
+
+tasks:
+  # ══ GATHER · the request, the quotes, last run's orders ════════════════
+  rfq_text:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.rfq_path }}" }
+
+  rfq:
+    with:
+      text: ${{ tasks.rfq_text.output }}
+    invoke:
+      tool: "nika:convert"
+      args: { input: "${{ with.text }}", from: yaml, to: json }
+
+  # Sorted lexicographically (stdlib §nika:glob), so quote-a, -b, -c keep
+  # their order through every fan-out below.
+  found:
+    invoke:
+      tool: "nika:glob"
+      args: { pattern: "${{ const.quotes_glob }}" }
+
+  texts:
+    with:
+      paths: ${{ tasks.found.output }}
+    for_each:
+      items: ${{ with.paths }}
+      max_items: 12        # more files than this fails the task, never a silent cut
+      max_parallel: 4
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ item }}" }
+
+  # The first run has no state file · only « not found » is forgiven.
+  sent_before:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.state_path }}" }
+    on_error:
+      on_codes: [NIKA-BUILTIN-READ-001]
+      recover: { orders: {} }
+
+  # ══ NORMALIZE · facts, then the trust check ════════════════════════════
+  # The schema is the SHAPE of an answer. Whether a fact is believable
+  # (a date that is a date, a known currency) is `checked`'s job below.
+  extract:
+    with:
+      texts: ${{ tasks.texts.output }}
+    when: ${{ with.texts != null && inputs.rehearse == false }}
+    for_each:
+      items: ${{ with.texts }}
+      max_items: 12
+      max_parallel: 2
+      fail_fast: false     # a quote the model cannot read yields null here, and lands in review.json
+    infer:
+      max_tokens: 1500     # think block + one small object
+      prompt: |
+        Copy the commercial terms out of this supplier quotation. Copy the
+        numbers as written: do not convert currencies and do not compute
+        totals.
+        payment_terms · net30, net45, net60, prepaid or other (« 45 days
+        end of month » is net45).
+        valid_until · the last day the offer holds, as YYYY-MM-DD.
+        Quotation ·
+        ${{ item }}
+      schema:
+        type: object
+        additionalProperties: false
+        required: [supplier, quote_id, unit_price, currency, minimum_order, lead_time_days, payment_terms, valid_until]
+        properties:
+          supplier: { type: string }
+          quote_id: { type: string }
+          unit_price: { type: number, exclusiveMinimum: 0 }
+          currency: { type: string, enum: [EUR, USD, GBP, other] }
+          minimum_order: { type: integer, minimum: 1 }
+          lead_time_days: { type: integer, minimum: 0 }
+          payment_terms: { type: string, enum: [net30, net45, net60, prepaid, other] }
+          valid_until: { type: string }
+
+  # Supplier ids come from the file names, never from the model.
+  facts:
+    with:
+      paths: ${{ tasks.found.output }}
+      extracted: ${{ tasks.extract.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          rehearse: "${{ inputs.rehearse }}"
+          paths: "${{ with.paths }}"
+          extracted: "${{ with.extracted }}"
+          known: "${{ const.known.quotes }}"
+        expression: >-
+          (if .rehearse then .known else .extracted end) as $f
+          | [.paths, $f] | transpose
+          | map(.[1] + {id: (.[0] | split("/") | last | ltrimstr("quote-") | rtrimstr(".txt")), source: .[0]})
+
+  checked:
+    with:
+      facts: ${{ tasks.facts.output }}
+    for_each:
+      items: ${{ with.facts }}
+      max_items: 12
+      max_parallel: 4
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ item }}"
+        schema:
+          type: object
+          required: [id, supplier, quote_id, unit_price, currency, minimum_order, lead_time_days, payment_terms, valid_until]
+          properties:
+            supplier: { type: string, minLength: 2 }
+            quote_id: { type: string, pattern: "^[A-Z]{2}[A-Z0-9/-]{2,20}$" }
+            unit_price: { type: number, exclusiveMinimum: 0, maximum: 1000 }
+            currency: { enum: [EUR, USD, GBP] }
+            minimum_order: { type: integer, minimum: 1 }
+            lead_time_days: { type: integer, minimum: 0, maximum: 365 }
+            payment_terms: { enum: [net30, net45, net60, prepaid] }
+            valid_until: { type: string, pattern: "^20[0-9]{2}-[01][0-9]-[0-3][0-9]$" }
+
+  split:
+    with:
+      facts: ${{ tasks.facts.output }}
+      checked: ${{ tasks.checked.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: ["${{ with.facts }}", "${{ with.checked }}"]
+        expression: >-
+          transpose
+          | {valid: map(select(.[1].valid) | .[0]),
+             rejected: map(select(.[1].valid | not) | {id: .[0].id, source: .[0].source, errors: .[1].errors})}
+
+  # Branch one · the quotes nobody should decide on until a person looks.
+  review:
+    with:
+      split: ${{ tasks.split.output }}
+    when: ${{ size(with.split.rejected) > 0 }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/quote-compare-decide/review.json"
+        content: "${{ with.split.rejected }}"
+        create_dirs: true
+
+  # Branch two · days each valid quote still holds on the decision day.
+  validity:
+    with:
+      split: ${{ tasks.split.output }}
+      rfq: ${{ tasks.rfq.output }}
+    when: ${{ size(with.split.valid) > 0 }}
+    for_each:
+      items: ${{ with.split.valid }}
+      max_items: 12
+      max_parallel: 4
+    invoke:
+      tool: "nika:date"
+      args:
+        op: diff
+        start: "${{ with.rfq.decide_by }}T00:00:00Z"   # diff wants a timestamp · a bare date is refused
+        end: "${{ item.valid_until }}T00:00:00Z"
+        unit: days
+
+  # ══ JUDGE · the decision table, computed and proven ════════════════════
+  # Two cases through one law · [0] is this run, [1] the known answer.
+  cases:
+    with:
+      split: ${{ tasks.split.output }}
+      days: ${{ tasks.validity.output }}
+      rfq: ${{ tasks.rfq.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          run: { rfq: "${{ with.rfq }}", quotes: "${{ with.split.valid }}", days: "${{ with.days }}" }
+          known: "${{ const.known }}"
+        expression: >-
+          [{rfq: .run.rfq, quotes: .run.quotes, days: (.run.days // [])},
+           {rfq: .known.rfq, quotes: .known.quotes, days: .known.days}]
+
+  law:
+    with:
+      cases: ${{ tasks.cases.output }}
+    for_each:
+      items: ${{ with.cases }}
+      max_items: 2
+      max_parallel: 2
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          case: "${{ item }}"
+          fx: "${{ const.fx_to_eur }}"
+          w: "${{ const.weights }}"
+          ts: "${{ const.terms_score }}"
+          moq: "${{ const.max_moq_ratio }}"
+        expression: >-
+          .case.rfq as $r | .fx as $fx | .w as $w | .ts as $ts | .moq as $m
+          | [.case.quotes, .case.days] | transpose
+          | map(.[0] + {days_valid: .[1]})
+          | map(. + {order_qty: ([$r.quantity, .minimum_order] | max)})
+          | map(. + {total: (.unit_price * .order_qty), total_eur: (.unit_price * .order_qty * $fx[.currency])})
+          | map(. + {rules: {
+              valid_on_decision_day: (.days_valid >= 0),
+              lead_time_fits: (.lead_time_days <= $r.need_within_days),
+              moq_within_ratio: (.minimum_order <= ($r.quantity * $m))}})
+          | map(. + {eligible: ([.rules[]] | all), failed_rules: [.rules | to_entries[] | select(.value | not) | .key]})
+          | (map(select(.eligible) | .total_eur) | min) as $low
+          | map(. + {score: (if .eligible then
+                ((100 * $w.cost * $low / .total_eur)
+                 + (100 * $w.lead * (1 - .lead_time_days / $r.need_within_days))
+                 + ($w.terms * $ts[.payment_terms])) * 10 | round / 10
+              else null end)})
+          | sort_by(if .eligible then 0 - .score else 1000 end)
+          | {
+              rows: .,
+              eligible: map(select(.eligible)),
+              winner: (map(select(.eligible)) | first | .id // null),
+              top_score: (map(select(.eligible) | .score) | max // 0),
+              proof: {winner: (map(select(.eligible)) | first | .id // null),
+                      scores: (map(select(.eligible) | {key: .id, value: .score}) | from_entries)},
+              chart: map({quote: "\(.id) · \(.supplier)", total_eur: ((.total_eur * 100 | round) / 100)}),
+              flat: map({id, supplier, quote_id, currency, unit_price, order_qty,
+                         total: ((.total * 100 | round) / 100), total_eur: ((.total_eur * 100 | round) / 100),
+                         lead_time_days, payment_terms, valid_until, days_left: ([.days_valid, 0] | max),
+                         eligible, failed_rules: (.failed_rules | join(" ")), score})
+            }
+
+  # Before anything is asked · the law still gives the hand-worked answer,
+  # and no weight pushes a real score past 100. Red here fails the run
+  # before `pick` (and moves this run's files to .nika/quarantine/).
+  proven:
+    with:
+      law: ${{ tasks.law.output }}
+    when: ${{ with.law != null }}
+    invoke:
+      tool: "nika:assert"
+      args:
+        condition: ${{ with.law[1].proof == const.known.expect && with.law[0].top_score <= 100 }}
+        message: "the scoring law no longer gives const.known.expect, or a score passed 100 (check const.weights)"
+
+  chart:
+    with:
+      law: ${{ tasks.law.output }}
+    when: ${{ with.law != null && size(with.law[0].rows) > 0 }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.law[0].chart }}"
+        semantics: { quote: category }
+        chart: { type: bar, x: quote, y: total_eur, title: "Total cost per valid quote, EUR (RFQ quantity or the supplier minimum)" }
+        out: "out/quote-compare-decide/total-cost.svg"
+
+  # A spreadsheet will open this, and supplier text came out of their own
+  # documents · `formula_guard` keeps a cell starting with = + - @ inert.
+  # It quotes a negative number too (-3 becomes '-3), so the table shows
+  # days left on the decision day floored at 0, and the rule that failed.
+  table_csv:
+    with:
+      law: ${{ tasks.law.output }}
+    when: ${{ with.law != null && size(with.law[0].rows) > 0 }}
+    invoke:
+      tool: "nika:convert"
+      args:
+        input: "${{ with.law[0].flat }}"
+        from: json
+        to: csv
+        columns: [id, supplier, quote_id, currency, unit_price, order_qty, total, total_eur, lead_time_days, payment_terms, valid_until, days_left, eligible, failed_rules, score]
+        formula_guard: true
+
+  save_csv:
+    with:
+      csv: ${{ tasks.table_csv.output }}
+    when: ${{ with.csv != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/quote-compare-decide/decision-table.csv"
+        content: "${{ with.csv }}"
+        create_dirs: true
+
+  # ══ ACT · one idempotency key per eligible quote ═══════════════════════
+  keys:
+    with:
+      proof: ${{ tasks.proven.status }}   # a status read admits a failed proof, so the report still runs
+      law: ${{ tasks.law.output }}
+    when: ${{ with.proof == "success" && with.law != null && size(with.law[0].eligible) > 0 }}
+    for_each:
+      items: ${{ with.law[0].eligible }}
+      max_items: 12
+      max_parallel: 4
+    invoke:
+      tool: "nika:hash"
+      args:
+        content: { supplier: "${{ item.supplier }}", quote_id: "${{ item.quote_id }}" }
+        algo: sha256
+
+  # The keys meet last run's state · an ordered quote stays on the list,
+  # marked, and `send` refuses it below: picking it again sends nothing.
+  ledger:
+    with:
+      law: ${{ tasks.law.output }}
+      keys: ${{ tasks.keys.output }}
+      before: ${{ tasks.sent_before.output }}
+      rfq: ${{ tasks.rfq.output }}
+    when: ${{ with.keys != null && with.law != null }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          rfq: "${{ with.rfq }}"
+          eligible: "${{ with.law[0].eligible }}"
+          keys: "${{ with.keys }}"
+          before: "${{ with.before }}"
+        expression: >-
+          .rfq as $r
+          | (.before | if type == "string" then fromjson else . end) as $prev
+          | ([.eligible, .keys] | transpose
+             | map(.[0] + {key: .[1], already_ordered: ($prev.orders[.[1]] != null)})) as $rows
+          | {
+              prev: $prev,
+              rows: ($rows | map({id, supplier, score, total_eur, already_ordered})),
+              choices: (($rows | map(.id)) + ["none"]),
+              summary: ($rows | map("\(.id) \(.supplier) · score \(.score) · EUR \(.total_eur * 100 | round / 100)\(if .already_ordered then " · already ordered" else "" end)") | join("\n")),
+              orders: ($rows | map({key: .id, value: {
+                key: .key,
+                already_ordered: .already_ordered,
+                body: {po_ref: "PO-\($r.rfq_id)-\(.id)", rfq_id: $r.rfq_id, item: $r.item,
+                       supplier: .supplier, quote_id: .quote_id, quantity: .order_qty,
+                       unit_price: .unit_price, currency: .currency, total: ((.total * 100 | round) / 100),
+                       payment_terms: .payment_terms, lead_time_days: .lead_time_days},
+                patch: {orders: {(.key): {supplier: .supplier, quote_id: .quote_id, po_ref: "PO-\($r.rfq_id)-\(.id)"}}}
+              }}) | from_entries)
+            }
+
+  # The one human decision, where an order would leave the machine.
+  # Unattended, the engine takes `default:` (stdlib §nika:prompt), so a
+  # headless run answers « none » and orders nothing.
+  pick:
+    with:
+      ledger: ${{ tasks.ledger.output }}
+    when: ${{ with.ledger != null }}
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: choice
+        message: |
+          Valid quotes, best score first ·
+          ${{ with.ledger.summary }}
+          Send the purchase order to which supplier? « none » sends nothing.
+        choices: "${{ with.ledger.choices }}"
+        default: "none"
+
+  # The key travels as `idempotency-key`, which makes this POST safe to
+  # retry (stdlib §nika:fetch: a keyed call keeps the status table) · the
+  # ERP sees the same key on every attempt and on every rerun.
+  #
+  # Why `skip` and not a recover sample: a recovered task settles as a
+  # success, and `remember` below runs only `after: { send: success }`. A
+  # stand-in value would record an order that never left. A skipped task
+  # blocks `remember`, and its error stays at `tasks.send.error`.
+  # The ERP's answer is read nowhere, so no write in this file carries
+  # content from outside: `check` finds no NIKA-SEC-009 path to gate.
+  send:
+    with:
+      pick: ${{ tasks.pick.output }}
+      ledger: ${{ tasks.ledger.output }}
+    when: ${{ with.pick != null && with.pick != "none" && inputs.rehearse == false && with.ledger != null && with.ledger.orders[with.pick].already_ordered == false }}
+    timeout: "30s"
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      jitter: true
+    invoke:
+      tool: "nika:fetch"
+      args:
+        url: "${{ const.erp_url }}"
+        method: POST
+        headers:
+          idempotency-key: "${{ with.ledger.orders[with.pick].key }}"
+        body: "${{ with.ledger.orders[with.pick].body }}"
+        mode: raw
+        response: { accept: [200, 201, 409] }   # 409 · the ERP already holds this key
+    on_error:
+      skip: true
+
+  # The key is recorded only once the ERP accepted it (or already had it).
+  remember:
+    after: { send: success }
+    with:
+      pick: ${{ tasks.pick.output }}
+      ledger: ${{ tasks.ledger.output }}
+    when: ${{ with.ledger != null && with.pick != null && with.pick != "none" }}
+    invoke:
+      tool: "nika:json_merge_patch"
+      args:
+        target: "${{ with.ledger.prev }}"
+        patch: "${{ with.ledger.orders[with.pick].patch }}"
+
+  save_state:
+    with:
+      state: ${{ tasks.remember.output }}
+    when: ${{ with.state != null }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "${{ const.state_path }}"
+        content: "${{ with.state }}"
+        create_dirs: true
+
+  # ══ REPORT · every branch settles, then the run reads itself ═══════════
+  cost:
+    after: { review: terminal, proven: terminal, chart: terminal, save_csv: terminal, save_state: terminal }
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  report:
+    with:
+      cost: ${{ tasks.cost.output }}
+      split: ${{ tasks.split.output }}
+      law: ${{ tasks.law.output }}
+      ledger: ${{ tasks.ledger.output }}
+      pick: ${{ tasks.pick.output }}
+      proven: ${{ tasks.proven.status }}
+      review: ${{ tasks.review.status }}
+      csv: ${{ tasks.save_csv.status }}
+      state: ${{ tasks.save_state.status }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          rehearse: "${{ inputs.rehearse }}"
+          split: "${{ with.split }}"
+          law: "${{ with.law }}"
+          ledger: "${{ with.ledger }}"
+          pick: "${{ with.pick }}"
+          proven: "${{ with.proven }}"
+          review: "${{ with.review }}"
+          csv: "${{ with.csv }}"
+          state: "${{ with.state }}"
+          cost: "${{ with.cost }}"
+        expression: >-
+          (.law // [] | .[0]) as $t
+          | {
+            rehearse,
+            law_proven: (.proven == "success"),
+            counts: {
+              quotes: ((.split.valid | length) + (.split.rejected | length)),
+              rejected_for_review: (.split.rejected | length),
+              valid: (.split.valid | length),
+              eligible: (($t.eligible // []) | length)
+            },
+            verdicts: (($t.rows // []) | map({id, supplier, eligible, failed_rules, score})),
+            winner_by_score: ($t.winner // null),
+            decision: (if ($t.eligible // []) == [] then "no eligible quote · nothing to decide"
+                       elif .proven != "success" then "not asked · the scoring law failed its proof"
+                       elif .pick == null then "no answer taken · see tasks.pick in the trace"
+                       else .pick end),
+            order: (if .state == "success" then "accepted by the ERP · key recorded"
+                    elif .pick == null or .pick == "none" then "none sent"
+                    elif .ledger.orders[.pick].already_ordered then "already ordered on an earlier run · not sent again"
+                    elif .rehearse then "rehearsal · never sent"
+                    else "not accepted · see tasks.send.error in the trace" end),
+            written: {review_json: (.review == "success"), decision_table_csv: (.csv == "success"), sent_keys_json: (.state == "success")},
+            cost
+          }
+
+  save_report:
+    with:
+      report: ${{ tasks.report.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/quote-compare-decide/run-report.json"
+        content: "${{ with.report }}"
+        create_dirs: true
+
+outputs:
+  decision:
+    value: ${{ tasks.report.output }}
+    description: "Counts per branch, the verdict per quote, the answer at the gate, whether an order was recorded and the run's cost"
+  table:
+    value: ${{ tasks.law.output[0] }}
+    description: "This run's valid quotes with their totals, rule verdicts and scores, best first · empty rows when no quote passed validation"

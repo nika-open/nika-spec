@@ -1,0 +1,825 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · finance / small business
+#
+# The month close a small company's admin does by hand, end to end · every
+# receipt in the folder is typed by a local model and checked against the
+# ledger's rules, then reconciled against the bank statement: same amount,
+# a date within the window, the vendor's name on the bank line. Receipts
+# with no bank line, bank lines with no receipt and duplicate receipts each
+# get their own list, a double charge becomes a refund claim with a polite
+# email draft, the tax is summed per rate, spend is charted per payee, and
+# a month-close report lands beside the ledger. One question at the very
+# end: post the booked rows to the books?
+#
+# Demonstrates ·
+#   - five phases · gather · normalize · judge · act · report
+#   - one assertion before any model call · `max_receipts` caps the fan-out,
+#     a bank statement that breaks its schema stops the close, and so do
+#     laws that no longer give their known answers
+#   - `infer.schema:` per receipt, then `nika:validate` against ONE const
+#     rule set · a record that breaks it is data with reasons, not a crash
+#   - the reconciliation join in `nika:jq` · amount in integer cents, the
+#     vendor's first two words on the bank line, and the date gap from
+#     `nika:date diff` for every candidate pair, matched closest first
+#   - both laws live in const and run first on hand-extracted answers · the
+#     one assert holds them to the hand-counted result, beside the cost cap
+#   - `nika:chart` · spend per payee as a deterministic SVG
+#   - `nika:hash` · one fingerprint of the statement and the booked rows,
+#     used as the close id AND as the post's idempotency key
+#   - `nika:inspect` · the run's own cost folded into run-report.json, which
+#     is written whatever the four writes before it did (`after: … terminal`)
+#   - one `mode: confirm` gate where the rows would leave, then a keyed POST
+#     that may retry, and whose `on_error:` forgives only a missing token
+#
+# Needs · ollama serving qwen3.5:4b for the receipts and the refund emails
+#   (`--model mock/echo` needs nothing) · BOOKS_API_TOKEN and a real
+#   accounting API, but only for the post after a yes. Without the token the
+#   post recovers on NIKA-VAR-001 before a byte leaves, and
+#   `books.example.com` is a documentation host the engine never dials
+#   (RFC 2606/6761), both measured.
+#
+# Run · nika run examples/receipt-ledger.nika
+#   Mock rehearsal (zero key, deterministic) · add `--model mock/echo`. The
+#   mock answers `mock` for every text field and 0 for every number, so all
+#   eight receipts fail the date and currency rules and none is booked: the
+#   report lists them, every bank debit lands under « no receipt », the chart
+#   shows the statement's payees, no refund is drafted and the gate is not
+#   asked (exit 0). The laws still run on their known answers. Read the way
+#   a careful person types them (the `known` block), the sample receipts
+#   give six booked, one duplicate, one not booked, five bank matches, one
+#   double charge with its refund claim, one cash receipt with no bank line
+#   and one bank line with no receipt. A model that reads them as well then
+#   asks at the gate: at a terminal it waits for you, headless it takes
+#   `default: false` and nothing is sent · `--answer approve=true` says yes
+#   in one pass.
+#   Knobs · `--var match_window_days=3` · `--var max_receipts=200`.
+
+nika: receipt-ledger
+
+# The house seat is a THINKING model: the think block and the JSON both count
+# against `max_tokens` (engine#428), so each ceiling covers both.
+model: ollama/qwen3.5:4b   # local · zero key · receipts and statement never reach a cloud provider
+
+inputs:
+  match_window_days:
+    type: integer
+    default: 5
+    description: "How many days a bank debit may sit from its receipt's date and still match"
+  max_receipts:
+    type: integer
+    default: 50
+    description: "The cost cap · more receipts than this stops the run before the first model call"
+
+const:
+  receipts_glob: "examples/fixtures/receipt-ledger/*.txt"
+  statement_csv: "examples/fixtures/receipt-ledger/bank-statement.csv"
+
+  # ── the rules ──────────────────────────────────────────────────────
+  # What a receipt must carry to be booked · used on the model's records AND
+  # on the hand-extracted ones below.
+  receipt_rules:
+    type: object
+    required: [vendor, invoice_no, date, currency, total, tax, tax_rate]
+    properties:
+      vendor: { type: string, minLength: 1 }
+      invoice_no: { type: string, minLength: 1 }
+      date: { type: string, pattern: "^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" }
+      currency: { type: string, pattern: "^[A-Z]{3}$" }
+      total: { type: number, minimum: 0 }
+      tax: { type: number, minimum: 0 }
+      tax_rate: { type: number, minimum: 0, maximum: 100 }
+
+  # What the bank export must look like before anything is matched to it.
+  # Every CSV cell arrives as a string, so amounts are checked as text.
+  statement_rules:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [date, description, amount, currency, original_amount, original_currency]
+      properties:
+        date: { type: string, pattern: "^20[0-9]{2}-[0-9]{2}-[0-9]{2}$" }
+        description: { type: string, minLength: 1 }
+        amount: { type: string, pattern: "^-?[0-9]+\\.[0-9]{2}$" }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        original_amount: { type: string, pattern: "^(-?[0-9]+\\.[0-9]{2})?$" }
+        original_currency: { type: string, pattern: "^([A-Z]{3})?$" }
+
+  # ── the ledger law · receipts in, booked rows and match candidates out ──
+  # Invalid records keep their reasons; duplicates are matched on the
+  # vendor (case, punctuation and spacing folded) plus the invoice number,
+  # and the first file keeps the row. A candidate is a booked receipt and a
+  # bank debit with the same amount in the receipt's currency (the bank's
+  # original amount when it converted) whose description carries the
+  # vendor's first two words. No currency is ever converted.
+  ledger_law: |
+    def cents: . * 100 | round;
+    def norm: ascii_downcase | gsub("[^a-z0-9 ]"; " ") | gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
+    def words: norm | split(" ") | map(select(length > 0)) | .[:2];
+    def reason: (.path | ltrimstr("/")) as $f
+      | $f + " · "
+      + if (.message | startswith("null is not")) then "not found on the receipt"
+        elif $f == "date" and (.schema_path | endswith("/pattern")) then (.message | split(" does not match")[0]) + " is not a YYYY-MM-DD date"
+        elif $f == "currency" and (.schema_path | endswith("/pattern")) then (.message | split(" does not match")[0]) + " is not a three-letter currency code"
+        else .message end;
+    . as $in
+    | ([$in.files, ($in.records // []), ($in.checks // [])] | transpose
+       | map({file: .[0], rec: .[1], check: .[2]})) as $all
+    | ($all | map(select(.check.valid != true)
+        | {file,
+           vendor_words: (if .rec != null and ((.rec.vendor // "") | length) > 0 then (.rec.vendor | words) else [] end),
+           reasons: (if .rec == null then ["no typed record · the model could not read this receipt"]
+                     else (.check.errors | map(reason) | sort) end)})) as $invalid
+    | ($all | map(select(.check.valid == true)
+        | .rec + {file, words: (.rec.vendor | words),
+                  dkey: ((.rec.vendor | norm) + "|" + (.rec.invoice_no | ascii_upcase | gsub("\\s+"; "")))})) as $ok
+    | [range(0; $ok | length) as $i
+        | $ok[$i] + {first_seen: ([$ok[:$i][] | select(.dkey == $ok[$i].dkey) | .file] | .[0])}] as $marked
+    | ($marked | map(select(.first_seen != null) | {file, vendor, invoice_no, first_seen})) as $duplicates
+    | ($marked | map(select(.first_seen == null)
+        | {file, vendor, words, invoice_no, date, currency, rate: .tax_rate,
+           total_c: (.total | cents), tax_c: (.tax | cents)})) as $booked
+    | ($in.bank | to_entries | map(.value + {line: (.key + 1)})) as $rows
+    | ($rows | map(select(.amount | startswith("-"))
+        | . + {amount_c: (.amount | ltrimstr("-") | tonumber | cents),
+               orig_c: (if .original_amount == "" then null else (.original_amount | ltrimstr("-") | tonumber | cents) end),
+               text: (.description | norm)})) as $debits
+    | ($rows | map(select(.amount | startswith("-") | not))) as $credits
+    | [ $booked[] as $r | $debits[] as $d
+        | select(if $d.orig_c != null then ($d.original_currency == $r.currency and $d.orig_c == $r.total_c)
+                 else ($d.currency == $r.currency and $d.amount_c == $r.total_c) end)
+        | select(($r.words | length) > 0 and ($r.words | all(.[]; . as $x | any(($d.text | split(" "))[]; . == $x))))
+        | {receipt: $r.file, line: $d.line, start: "\($r.date)T00:00:00Z", end: "\($d.date)T00:00:00Z"} ] as $candidates
+    | {booked: $booked, invalid: $invalid, duplicates: $duplicates, debits: $debits, credits: $credits,
+       candidates: $candidates}
+
+  # ── the close law · candidates and their day gaps in, the close out ──
+  # Receipts are matched in file order to the closest unused debit inside
+  # the window. A leftover debit that was a candidate for an already-matched
+  # receipt is a double charge; any other leftover is a bank line with no
+  # receipt, with the unbooked receipt it probably belongs to. Tax is summed
+  # per printed rate and re-checked against net × rate to the cent.
+  close_law: |
+    def money: (. / 100 | floor | tostring) + "." + (. % 100 | tostring | if length == 1 then "0" + . else . end);
+    .window as $w | .ledger as $l
+    | ([$l.candidates, (.gaps // [])] | transpose | map(.[0] + {days: .[1]})
+       | map(select(.days != null and (.days | fabs) <= $w))
+       | sort_by([(.days | fabs), .line])) as $near
+    | (reduce $l.booked[] as $r ({used: [], pairs: []};
+        . as $s
+        | ([$near[] | select(.receipt == $r.file) | select(.line as $n | any($s.used[]; . == $n) | not)] | .[0]) as $p
+        | if $p == null then . else {used: (.used + [$p.line]), pairs: (.pairs + [$p])} end)) as $m
+    | ($l.debits | map(. as $d
+        | ($m.pairs | map(select(.line == $d.line)) | .[0]) as $hit
+        | ($near | map(select(.line == $d.line and (.receipt as $f | any($m.pairs[]; .receipt == $f)))) | .[0]) as $twin
+        | $d + {receipt: ($hit.receipt // null), days: ($hit.days // null),
+                double_of: (if $hit == null and $twin != null then $twin.receipt else null end)})) as $lines
+    | ($l.booked | map(. + {net_c: (.total_c - .tax_c),
+        line: (.file as $f | $m.pairs | map(select(.receipt == $f)) | .[0].line)})) as $b
+    | ($lines | map(select(.receipt == null and .double_of == null)
+        | . as $d
+        | {line, date, description, amount,
+           probable_receipt: ($l.invalid | map(select((.vendor_words | length) > 0
+               and (.vendor_words | all(.[]; . as $x | any(($d.text | split(" "))[]; . == $x))))) | .[0].file)})) as $unmatched_bank
+    | ($lines | map(select(.double_of != null)
+        | . as $d | ($b | map(select(.file == $d.double_of)) | .[0]) as $r
+        | {vendor: $r.vendor, invoice_no: $r.invoice_no, receipt: $r.file, currency: $d.currency,
+           amount: ($d.amount_c | money), first_line: $r.line,
+           first_date: ($lines | map(select(.line == $r.line)) | .[0].date),
+           second_line: $d.line, second_date: $d.date})) as $doubles
+    | { ledger_rows: ($b | map({date, vendor, invoice_no, currency, net: (.net_c | money), tax_rate: .rate,
+          tax: (.tax_c | money), total: (.total_c | money), bank_line: .line,
+          status: (if .line == null then "no bank line" else "matched" end), file})),
+        matched: ($m.pairs | map({receipt, line, days})),
+        unmatched_receipts: ($b | map(select(.line == null)
+          | {file, vendor, invoice_no, date, total: (.total_c | money), currency,
+             why: "no bank debit of this amount within \($w) days · paid in cash, or not cleared yet"})),
+        unmatched_bank: $unmatched_bank,
+        double_charges: $doubles,
+        credits: ($l.credits | map({line, date, description, amount})),
+        tax_by_rate: ($b | group_by([.currency, .rate])
+          | map({currency: .[0].currency, rate: .[0].rate, receipts: length,
+                 net_cents: (map(.net_c) | add), tax_cents: (map(.tax_c) | add), gross_cents: (map(.total_c) | add)}
+                | . + {net: (.net_cents | money), tax: (.tax_cents | money), gross: (.gross_cents | money)})),
+        tax_mismatches: ($b | map(select(((.net_c * .rate / 100) | round) - .tax_c | fabs > 1))
+          | map({file, vendor, rate, tax: (.tax_c | money), expected: ((.net_c * .rate / 100) | round | money)})),
+        spend_by_payee: ($lines
+          | map(. + {payee: ((.receipt // .double_of) as $f
+              | if $f != null then ($b | map(select(.file == $f)) | .[0].vendor)
+                else (.description | sub("^(CARD|TRANSFER) "; "") | sub(" [A-Z]+-[0-9]+$"; "")) end)})
+          | group_by(.payee) | map({payee: .[0].payee, spend_cents: (map(.amount_c) | add)})
+          | sort_by([-.spend_cents, .payee]) | map(. + {spend: (.spend_cents / 100)})),
+        account_currency: ($l.debits | map(.currency) | unique | join("+")) }
+
+  # ── known answers, read by hand ────────────────────────────────────
+  # The eight sample receipts as a careful reader types them, plus one the
+  # model could not read (null). 04 is the re-sent copy of 01, in capitals
+  # as printed; 05 has no total, tax or rate. The statement rows are the
+  # sample statement as `nika:convert` hands them over (strings), and the
+  # gaps are each candidate pair's day difference, counted by hand.
+  known:
+    files:
+      - "01-copperleaf-stationery.txt"
+      - "02-blue-heron-coffee.txt"
+      - "03-northgate-hosting.txt"
+      - "04-copperleaf-stationery-copy.txt"
+      - "05-quayside-taxi.txt"
+      - "06-fernwood-print.txt"
+      - "07-blue-heron-coffee.txt"
+      - "08-harbour-yard-market.txt"
+      - "09-unreadable-scan.txt"
+    records:
+      - { vendor: "Copperleaf Stationery", invoice_no: "CL-2041", date: "2026-10-02", currency: "EUR", total: 48.00, tax: 8.00, tax_rate: 20 }
+      - { vendor: "Blue Heron Coffee Roasters", invoice_no: "BH-0917", date: "2026-10-07", currency: "EUR", total: 23.40, tax: 2.13, tax_rate: 10 }
+      - { vendor: "Northgate Hosting", invoice_no: "NG-55812", date: "2026-10-01", currency: "USD", total: 120.00, tax: 0.00, tax_rate: 0 }
+      - { vendor: "COPPERLEAF STATIONERY", invoice_no: "CL-2041", date: "2026-10-02", currency: "EUR", total: 48.00, tax: 8.00, tax_rate: 20 }
+      - { vendor: "Quayside Taxi", invoice_no: "QT-7781", date: "2026-10-14", currency: "EUR", total: null, tax: null, tax_rate: null }
+      - { vendor: "Fernwood Print Studio", invoice_no: "FP-1033", date: "2026-09-29", currency: "EUR", total: 180.00, tax: 30.00, tax_rate: 20 }
+      - { vendor: "Blue Heron Coffee Roasters", invoice_no: "BH-0932", date: "2026-10-21", currency: "EUR", total: 18.60, tax: 1.69, tax_rate: 10 }
+      - { vendor: "Harbour Yard Market", invoice_no: "HM-311", date: "2026-10-18", currency: "EUR", total: 9.80, tax: 0.51, tax_rate: 5.5 }
+      - null
+    bank:
+      - { date: "2026-10-01", description: "CARD NORTHGATE HOSTING", amount: "-110.43", currency: "EUR", original_amount: "-120.00", original_currency: "USD" }
+      - { date: "2026-10-02", description: "CARD COPPERLEAF STATIONERY", amount: "-48.00", currency: "EUR", original_amount: "", original_currency: "" }
+      - { date: "2026-10-03", description: "TRANSFER FERNWOOD PRINT STUDIO FP-1033", amount: "-180.00", currency: "EUR", original_amount: "", original_currency: "" }
+      - { date: "2026-10-07", description: "CARD BLUE HERON COFFEE", amount: "-23.40", currency: "EUR", original_amount: "", original_currency: "" }
+      - { date: "2026-10-14", description: "CARD QUAYSIDE TAXI", amount: "-18.00", currency: "EUR", original_amount: "", original_currency: "" }
+      - { date: "2026-10-21", description: "CARD BLUE HERON COFFEE", amount: "-18.60", currency: "EUR", original_amount: "", original_currency: "" }
+      - { date: "2026-10-22", description: "CARD BLUE HERON COFFEE", amount: "-18.60", currency: "EUR", original_amount: "", original_currency: "" }
+      - { date: "2026-10-25", description: "CARD PARKWAY GARAGE", amount: "-12.00", currency: "EUR", original_amount: "", original_currency: "" }
+      - { date: "2026-10-28", description: "TRANSFER IN CLIENT PAYMENT INV-0412", amount: "1500.00", currency: "EUR", original_amount: "", original_currency: "" }
+    # candidates in order · 01×L2 · 02×L4 · 03×L1 · 06×L3 · 07×L6 · 07×L7
+    gaps: [0, 0, 0, 4, 0, 1]
+    window: 5
+  expected:
+    booked: ["01-copperleaf-stationery.txt", "02-blue-heron-coffee.txt", "03-northgate-hosting.txt", "06-fernwood-print.txt", "07-blue-heron-coffee.txt", "08-harbour-yard-market.txt"]
+    invalid:
+      - ["05-quayside-taxi.txt", ["tax · not found on the receipt", "tax_rate · not found on the receipt", "total · not found on the receipt"]]
+      - ["09-unreadable-scan.txt", ["no typed record · the model could not read this receipt"]]
+    duplicates: [["04-copperleaf-stationery-copy.txt", "01-copperleaf-stationery.txt"]]
+    matched: [["01-copperleaf-stationery.txt", 2], ["02-blue-heron-coffee.txt", 4], ["03-northgate-hosting.txt", 1], ["06-fernwood-print.txt", 3], ["07-blue-heron-coffee.txt", 6]]
+    unmatched_receipts: ["08-harbour-yard-market.txt"]
+    double_charges: [["07-blue-heron-coffee.txt", 6, 7, "18.60"]]
+    unmatched_bank: [[5, "05-quayside-taxi.txt"], [8, null]]
+    credits: [9]
+    tax_by_rate: [["EUR", 5.5, 1, 929, 51], ["EUR", 10, 2, 3818, 382], ["EUR", 20, 2, 19000, 3800], ["USD", 0, 1, 12000, 0]]
+    tax_mismatches: []
+    spend_by_payee: [["Fernwood Print Studio", 18000], ["Northgate Hosting", 11043], ["Blue Heron Coffee Roasters", 6060], ["Copperleaf Stationery", 4800], ["QUAYSIDE TAXI", 1800], ["PARKWAY GARAGE", 1200]]
+
+secrets:
+  books_token:
+    source: env
+    key: BOOKS_API_TOKEN
+    egress:
+      - to: "nika:fetch"            # the one post · pinned to the books host
+        host: "books.example.com"
+      - to: "outputs"               # the post receipt comes back from the authenticated call
+
+permits:
+  tools: ["nika:assert", "nika:chart", "nika:convert", "nika:date", "nika:fetch", "nika:glob", "nika:hash", "nika:inspect", "nika:jq", "nika:prompt", "nika:read", "nika:validate", "nika:write"]
+  net:
+    # `egress:` above sanctions the FLOW (the token may ride this post); it
+    # does not grant the capability. The host is this separate line, and it
+    # is the only one the file can reach.
+    http: ["books.example.com"]
+  fs:
+    # The glob walks the folder itself, so the folder is granted beside its
+    # files. `*.txt` is one segment: the statement CSV beside the receipts
+    # is not matched by it, so it is named on its own line.
+    read:
+      - "examples/fixtures/receipt-ledger"
+      - "examples/fixtures/receipt-ledger/*.txt"
+      - "examples/fixtures/receipt-ledger/bank-statement.csv"   # keep in step with const.statement_csv
+    # Five files, each named · nothing else under out/ is writable.
+    write:
+      - "out/receipt-ledger/close-report.md"
+      - "out/receipt-ledger/close.json"
+      - "out/receipt-ledger/ledger.csv"
+      - "out/receipt-ledger/run-report.json"
+      - "out/receipt-ledger/spend-by-payee.svg"
+
+tasks:
+  # ══ 1 · gather · the shoebox and the bank export ════════════════════
+  receipts:
+    invoke:
+      tool: "nika:glob"
+      args: { pattern: "${{ const.receipts_glob }}" }
+
+  # No `on_error:` · a receipt that cannot be read from disk fails the run:
+  # a close that silently skips a file is worse than no close.
+  texts:
+    with:
+      paths: ${{ tasks.receipts.output }}
+    for_each:
+      items: ${{ with.paths }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ item }}" }
+
+  statement:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.statement_csv }}" }
+
+  bank_rows:
+    with:
+      csv: ${{ tasks.statement.output }}
+    invoke:
+      tool: "nika:convert"
+      args:
+        input: "${{ with.csv }}"
+        from: csv
+        to: json
+        has_header: true
+
+  bank_check:
+    with:
+      rows: ${{ tasks.bank_rows.output }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.rows }}"
+        schema: "${{ const.statement_rules }}"
+
+  # ── the proof · same rules, same laws, answers counted by hand ──────
+  # The live month runs the very same const laws further down, so a law
+  # that passes here is the law that closes the month.
+  known_checks:
+    for_each:
+      items: ${{ const.known.records }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ item }}"
+        schema: "${{ const.receipt_rules }}"
+
+  known_ledger:
+    with:
+      checks: ${{ tasks.known_checks.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { files: "${{ const.known.files }}", records: "${{ const.known.records }}", checks: "${{ with.checks }}", bank: "${{ const.known.bank }}" }
+        expression: "${{ const.ledger_law }}"
+
+  known_close:
+    with:
+      ledger: ${{ tasks.known_ledger.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { ledger: "${{ with.ledger }}", gaps: "${{ const.known.gaps }}", window: "${{ const.known.window }}" }
+        expression: "${{ const.close_law }}"
+
+  prove:
+    with:
+      ledger: ${{ tasks.known_ledger.output }}
+      close: ${{ tasks.known_close.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { l: "${{ with.ledger }}", c: "${{ with.close }}", w: "${{ const.expected }}" }
+        expression: >-
+          .l as $l | .c as $c | .w as $w
+          | ($l.booked | map(.file)) == $w.booked
+          and ($l.invalid | map([.file, .reasons])) == $w.invalid
+          and ($l.duplicates | map([.file, .first_seen])) == $w.duplicates
+          and ($c.matched | map([.receipt, .line])) == $w.matched
+          and ($c.unmatched_receipts | map(.file)) == $w.unmatched_receipts
+          and ($c.double_charges | map([.receipt, .first_line, .second_line, .amount])) == $w.double_charges
+          and ($c.unmatched_bank | map([.line, .probable_receipt])) == $w.unmatched_bank
+          and ($c.credits | map(.line)) == $w.credits
+          and ($c.tax_by_rate | map([.currency, .rate, .receipts, .net_cents, .tax_cents])) == $w.tax_by_rate
+          and $c.tax_mismatches == $w.tax_mismatches
+          and ($c.spend_by_payee | map([.payee, .spend_cents])) == $w.spend_by_payee
+
+  # The one assert, before the first model call and before any write ·
+  # too many receipts (the cost cap), a statement that is not what the
+  # rules expect, or laws that no longer give the hand-counted answers
+  # stop the close here · measured with `--var max_receipts=2`: exit 1,
+  # every later task blocked, no model call and no file under out/.
+  preflight:
+    with:
+      paths: ${{ tasks.receipts.output }}
+      bank: ${{ tasks.bank_check.output }}
+      law: ${{ tasks.prove.output }}
+    invoke:
+      tool: "nika:assert"
+      args:
+        condition: "${{ size(with.paths) <= inputs.max_receipts && with.bank.valid && with.law }}"
+        message: "more receipts than max_receipts, a bank statement that breaks statement_rules, or close laws that drifted from their known answers"
+
+  # ══ 2 · normalize · typed records the rules can judge ═══════════════
+  # A for_each output is an array in ITEM ORDER, so `transpose` pairs each
+  # file name with its own text.
+  pairs:
+    with:
+      paths: ${{ tasks.receipts.output }}
+      texts: ${{ tasks.texts.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: ["${{ with.paths }}", "${{ with.texts }}"]
+        expression: '[.[0], (.[1] // [])] | transpose | map({file: (.[0] | split("/") | last), text: .[1]})'
+    extract:
+      files: "map(.file)"
+
+  extracted:
+    after:
+      preflight: success
+    with:
+      pairs: ${{ tasks.pairs.output }}
+    for_each:
+      items: ${{ with.pairs }}
+      max_parallel: 2                    # a local model shares one GPU
+      fail_fast: false                   # one unreadable receipt must not stop the month
+    on_error:
+      recover: null                      # null holds the index · the law files it under review
+    infer:
+      max_tokens: 1200                   # think block + one small record
+      prompt: |
+        Here is one receipt (file ${{ item.file }}).
+
+        ${{ item.text }}
+
+        Copy its fields exactly as printed: the vendor's name, the invoice or
+        receipt number, the date as YYYY-MM-DD, the three-letter currency
+        code, the final total, the tax amount and the tax or VAT rate as a
+        percentage (20 for 20%). If a field is not printed on the receipt,
+        answer null. Never add up the lines yourself and never guess.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [vendor, invoice_no, date, currency, total, tax, tax_rate]
+        properties:
+          vendor: { type: string, maxLength: 120 }
+          invoice_no: { type: [string, "null"], maxLength: 40 }
+          date: { type: [string, "null"], maxLength: 10, description: "YYYY-MM-DD" }
+          currency: { type: [string, "null"], description: "ISO 4217 code, e.g. EUR" }
+          total: { type: [number, "null"], minimum: 0 }
+          tax: { type: [number, "null"], minimum: 0 }
+          tax_rate: { type: [number, "null"], minimum: 0, maximum: 100 }
+
+  checked:
+    with:
+      records: ${{ tasks.extracted.output }}
+    when: ${{ with.records != null }}    # an empty folder skips the fan-out above, and its value reads null
+    for_each:
+      items: ${{ with.records }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ item }}"
+        schema: "${{ const.receipt_rules }}"
+
+  # ══ 3 · judge · book, match, find what is missing ═══════════════════
+  ledger:
+    with:
+      files: ${{ tasks.pairs.files }}
+      records: ${{ tasks.extracted.output }}
+      checks: ${{ tasks.checked.output }}
+      bank: ${{ tasks.bank_rows.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { files: "${{ with.files }}", records: "${{ with.records }}", checks: "${{ with.checks }}", bank: "${{ with.bank }}" }
+        expression: "${{ const.ledger_law }}"
+    extract:
+      candidates: ".candidates"
+
+  # One date difference per candidate pair, in days (end minus start, so a
+  # debit after its receipt is positive). `nika:date` needs a full
+  # timestamp, which is why the law hands over `T00:00:00Z` dates.
+  gaps:
+    with:
+      candidates: ${{ tasks.ledger.candidates }}
+    for_each:
+      items: ${{ with.candidates }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:date"
+      args: { op: diff, start: "${{ item.start }}", end: "${{ item.end }}", unit: days }
+
+  close:
+    with:
+      ledger: ${{ tasks.ledger.output }}
+      gaps: ${{ tasks.gaps.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { ledger: "${{ with.ledger }}", gaps: "${{ with.gaps }}", window: "${{ inputs.match_window_days }}" }
+        expression: "${{ const.close_law }}"
+
+  # ══ 4 · act · the refund emails and the close files ═════════════════
+  # The claim's facts come from the law; the model only writes the words.
+  refunds:
+    with:
+      doubles: ${{ tasks.close.output.double_charges }}
+    for_each:
+      items: ${{ with.doubles }}
+      max_parallel: 2
+      fail_fast: false
+    on_error:
+      recover: null                      # no draft · the report says to write it by hand
+    infer:
+      max_tokens: 1200                   # think block + a short email
+      prompt: |
+        Write a short, polite email to ${{ item.vendor }} asking for a refund.
+        Our card was charged twice for the same receipt: invoice
+        ${{ item.invoice_no }}, ${{ item.amount }} ${{ item.currency }}, once on
+        ${{ item.first_date }} and again on ${{ item.second_date }}. Quote the
+        invoice number and the amount, thank them, and ask them to refund
+        the second charge to the same card.
+      schema:
+        type: object
+        additionalProperties: false
+        required: [subject, body]
+        properties:
+          subject: { type: string, maxLength: 140 }
+          body: { type: string, maxLength: 1500 }
+
+  # Every piece of the report, built as values. A draft that does not quote
+  # its own invoice number and amount is flagged for a human edit.
+  report:
+    with:
+      close: ${{ tasks.close.output }}
+      ledger: ${{ tasks.ledger.output }}
+      drafts: ${{ tasks.refunds.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { close: "${{ with.close }}", ledger: "${{ with.ledger }}", drafts: "${{ with.drafts }}" }
+        expression: |
+          def none: if length == 0 then "- none" else join("\n") end;
+          .close as $c | .ledger as $l
+          | ([$c.double_charges, (.drafts // [])] | transpose
+             | map(.[0] as $d | .[1] as $m
+                 | $d + {draft: $m,
+                         cites: ($m != null and ($m.body | contains($d.invoice_no)) and ($m.body | contains($d.amount)))})) as $claims
+          | { summary: "\($l.booked | length) booked · \($l.invalid | length) not booked · \($l.duplicates | length) duplicate(s) · \($c.matched | length) matched to the bank · \($c.double_charges | length) double charge(s) · \($c.unmatched_bank | length) bank line(s) without a receipt",
+              invalid: ($l.invalid | map("- `\(.file)` · " + (.reasons | join("; "))) | none),
+              duplicates: ($l.duplicates | map("- `\(.file)` · \(.vendor) \(.invoice_no) is already booked from `\(.first_seen)`") | none),
+              no_bank: ($c.unmatched_receipts | map("- `\(.file)` · \(.vendor) \(.invoice_no) · \(.total) \(.currency) · \(.why)") | none),
+              no_receipt: ($c.unmatched_bank | map("- line \(.line) · \(.date) · \(.description) · \(.amount)"
+                  + (if .probable_receipt != null then " · probably `\(.probable_receipt)`, not booked: type its total by hand" else " · find the receipt" end)) | none),
+              credits: ($c.credits | map("- line \(.line) · \(.date) · \(.description) · +\(.amount)") | none),
+              tax: ($c.tax_by_rate | map("| \(.currency) | \(.rate)% | \(.receipts) | \(.net) | \(.tax) | \(.gross) |")
+                  | if length == 0 then "| nothing booked | | | | | |" else join("\n") end),
+              tax_checks: ($c.tax_mismatches | map("- `\(.file)` · \(.vendor) · tax \(.tax) where \(.rate)% of the net gives \(.expected)") | none),
+              claims: ($claims | map("### Refund claim · \(.vendor) · \(.invoice_no)\n\nCharged twice: \(.amount) \(.currency) on \(.first_date) (bank line \(.first_line)) and \(.second_date) (bank line \(.second_line)).\n\n"
+                  + (if .draft == null then "_No draft came back · write this one by hand._"
+                     else "**Subject** · \(.draft.subject)\n\n\(.draft.body)\n\n"
+                       + (if .cites then "_Check · the draft quotes the invoice number and the amount._"
+                          else "_Check · the draft does not quote the invoice number and the amount: edit it before sending._" end) end))
+                  | if length == 0 then "_No double charge this month._" else join("\n\n") end),
+              close_json: ($c + {refund_claims: ($claims | map(del(.cites)))}),
+              chart_rows: ($c.spend_by_payee | map({payee, spend})),
+              currency: $c.account_currency }
+
+  csv:
+    with:
+      rows: ${{ tasks.close.output.ledger_rows }}
+    invoke:
+      tool: "nika:convert"
+      args:
+        input: "${{ with.rows }}"
+        from: json
+        to: csv
+        columns: ["date", "vendor", "invoice_no", "currency", "net", "tax_rate", "tax", "total", "bank_line", "status", "file"]
+        # A vendor name is text someone else printed. The guard puts a ' in
+        # front of any cell that starts with = + - @ (measured: `=HYPERLINK(…)`
+        # lands as `'=HYPERLINK(…)`), so a spreadsheet shows it instead of
+        # running it. Amounts are never negative here, so no total is touched.
+        formula_guard: true
+
+  save_csv:
+    with:
+      csv: ${{ tasks.csv.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: out/receipt-ledger/ledger.csv
+        content: "${{ with.csv }}"
+        create_dirs: true
+
+  save_close:
+    with:
+      close: ${{ tasks.report.output.close_json }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: out/receipt-ledger/close.json
+        content: "${{ with.close }}"     # one value · the engine serializes it (CONVENTIONS §5)
+        create_dirs: true
+
+  # Spend per payee, from the bank side: every debit has a payee even when
+  # no receipt was booked, so the picture exists on every run. Bars anchor
+  # at zero; the amounts are in the account's currency, named in the title.
+  chart:
+    with:
+      rows: ${{ tasks.report.output.chart_rows }}
+      currency: ${{ tasks.report.output.currency }}
+    when: ${{ size(with.rows) > 0 }}     # a statement with no debit · nothing to draw
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.rows }}"
+        semantics: { payee: category }
+        chart: { type: bar, x: payee, y: spend, title: "Spend by payee · ${{ with.currency }}" }
+        out: out/receipt-ledger/spend-by-payee.svg
+
+  save_report:
+    with:
+      r: ${{ tasks.report.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: out/receipt-ledger/close-report.md
+        create_dirs: true
+        content: |
+          # Month close
+
+          ${{ with.r.summary }}
+
+          Ledger · `ledger.csv` · machine close · `close.json` · spend per payee · `spend-by-payee.svg`
+
+          ## Bank lines with no receipt
+          ${{ with.r.no_receipt }}
+
+          ## Receipts with no bank line
+          ${{ with.r.no_bank }}
+
+          ## Double charges · refund claims to send
+          ${{ with.r.claims }}
+
+          ## Not booked · fix the receipt or type it by hand
+          ${{ with.r.invalid }}
+
+          ## Duplicates · left out of the ledger
+          ${{ with.r.duplicates }}
+
+          ## Tax by rate
+          | currency | rate | receipts | net | tax | gross |
+          | --- | --- | --- | --- | --- | --- |
+          ${{ with.r.tax }}
+
+          Tax lines that do not match their printed rate ·
+          ${{ with.r.tax_checks }}
+
+          ## Money in · not part of the expense match
+          ${{ with.r.credits }}
+
+  # ══ 5 · report · what this run did, whatever the four writes did ════
+  # (A red preflight blocks this phase too: that run's record is its trace.)
+  stamp:
+    invoke:
+      tool: "nika:date"
+      args: { op: now }
+
+  # One blake3 fingerprint of the statement and the booked rows: the close
+  # id in the run report, and the idempotency key of the post below.
+  close_id:
+    with:
+      statement: ${{ tasks.statement.output }}
+      rows: ${{ tasks.close.output.ledger_rows }}
+    invoke:
+      tool: "nika:hash"
+      args:
+        content: { statement: "${{ with.statement }}", rows: "${{ with.rows }}" }
+
+  cost:
+    after:
+      extracted: terminal
+      refunds: terminal
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  run_report:
+    after:
+      save_csv: terminal
+      save_close: terminal
+      save_report: terminal
+      chart: terminal
+    with:
+      ledger: ${{ tasks.ledger.output }}
+      close: ${{ tasks.close.output }}
+      law: ${{ tasks.prove.output }}
+      cost: ${{ tasks.cost.output }}
+      at: ${{ tasks.stamp.output }}
+      id: ${{ tasks.close_id.output }}
+      csv_status: ${{ tasks.save_csv.status }}
+      close_status: ${{ tasks.save_close.status }}
+      report_status: ${{ tasks.save_report.status }}
+      chart_status: ${{ tasks.chart.status }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          ledger: "${{ with.ledger }}"
+          close: "${{ with.close }}"
+          law: "${{ with.law }}"
+          cost: "${{ with.cost }}"
+          at: "${{ with.at }}"
+          id: "${{ with.id }}"
+          window: "${{ inputs.match_window_days }}"
+          writes:
+            ledger_csv: "${{ with.csv_status }}"
+            close_json: "${{ with.close_status }}"
+            close_report: "${{ with.report_status }}"
+            spend_chart: "${{ with.chart_status }}"
+        expression: >-
+          { closed_at: .at, close_id: .id,
+            counts: { receipts: ((.ledger.booked | length) + (.ledger.invalid | length) + (.ledger.duplicates | length)),
+                      booked: (.ledger.booked | length), not_booked: (.ledger.invalid | length),
+                      duplicates: (.ledger.duplicates | length), bank_debits: (.ledger.debits | length),
+                      matched: (.close.matched | length), double_charges: (.close.double_charges | length),
+                      bank_without_receipt: (.close.unmatched_bank | length),
+                      receipts_without_bank: (.close.unmatched_receipts | length), credits: (.close.credits | length) },
+            decisions: { match_window_days: .window, refund_claims: (.close.double_charges | map(.invoice_no)) },
+            verdicts: { laws_proven: .law, tax_mismatches: (.close.tax_mismatches | length) },
+            writes: .writes,
+            cost: .cost }
+
+  save_run:
+    with:
+      run: ${{ tasks.run_report.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: out/receipt-ledger/run-report.json
+        content: "${{ with.run }}"       # one value · the engine serializes it (CONVENTIONS §5)
+        create_dirs: true
+
+  # ══ the one question · only when something was booked ═══════════════
+  # Asked AFTER the close files and the run report are on disk, so the
+  # person can read them first. The check finds no lethal trifecta in this
+  # file (the only outside content is the post's own reply, and it reaches
+  # nothing but `outputs`), so this gate is not the checker's demand: it
+  # stands where the rows leave the machine. At a terminal it asks;
+  # headless it takes `default: false` and nothing is sent.
+  approve:
+    after:
+      save_run: success
+    with:
+      rows: ${{ tasks.close.output.ledger_rows }}
+      summary: ${{ tasks.report.output.summary }}
+    when: ${{ size(with.rows) > 0 }}     # nothing booked · nothing to ask
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: confirm
+        default: false
+        message: |
+          The month is closed in out/receipt-ledger/ · ${{ with.summary }}.
+          Post the ${{ size(with.rows) }} booked rows to books.example.com?
+
+  # The fingerprint rides as the idempotency key, which is what makes a
+  # retry legal here (a keyless POST with `retry:` is NIKA-SEC-016): every
+  # attempt and every re-run of the same close carries the same key, so an
+  # API that honours it books the month once.
+  push:
+    with:
+      go: ${{ tasks.approve.output }}
+      rows: ${{ tasks.close.output.ledger_rows }}
+      key: ${{ tasks.close_id.output }}
+    when: ${{ with.go == true }}         # a « no », or no question at all, sends nothing
+    retry:
+      max_attempts: 3
+      backoff_ms: 1000
+      backoff_strategy: exponential
+    invoke:
+      tool: "nika:fetch"
+      args:
+        # A literal URL, not a const: the token's `egress:` is pinned to
+        # books.example.com, and a host-pinned sanction needs a destination
+        # the check can read (NIKA-SEC-006 refuses a `${{ }}`-built one).
+        url: "https://books.example.com/v1/ledger/entries"
+        method: POST
+        headers:
+          authorization: "Bearer ${{ secrets.books_token }}"
+          idempotency-key: "${{ with.key }}"
+        body: { entries: "${{ with.rows }}" }
+    on_error:
+      # Rehearsal only, NARROWED to the one thing it may forgive: the token
+      # is not configured. An unset secret fails NIKA-VAR-001 before any
+      # byte leaves (measured), and this labelled value takes over. A
+      # rejected token or a dead endpoint stays loud. With a real API,
+      # delete this block too.
+      on_codes: [NIKA-VAR-001]
+      recover: { booked: false, note: "(rehearsal · BOOKS_API_TOKEN is not set · nothing was sent)" }
+
+outputs:
+  close:
+    value: ${{ tasks.close.output }}
+    description: "The reconciled month · matches, double charges, bank lines without receipts, tax by rate, spend per payee"
+  run:
+    value: ${{ tasks.run_report.output }}
+    description: "Counts per branch, decisions, verdicts and the run's own cost"
+  # Untyped on purpose · `push` is skipped (null) unless someone said yes.
+  posted: ${{ tasks.push.output }}

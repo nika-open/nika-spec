@@ -1,0 +1,610 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · growth / SEO
+#
+# Every public listing of a product (a directory page, a marketplace entry, a
+# registry page) should carry the same set of links and enough good
+# screenshots. Nobody is told when one goes missing; the traffic just stops
+# arriving. This job fetches every listing, finds its links and images,
+# scores it out of 100, and says what REGRESSED since the last run: a link
+# that disappeared, a score that fell, a page that stopped loading. No model,
+# no key.
+#
+# Demonstrates ·
+#   - phases · gather · normalize · judge · act · report
+#   - the root human gate over a real trifecta (NIKA-SEC-009) · see below
+#   - `nika:validate` on the listings file and on last run's state before
+#     either is trusted · an invalid listings file fetches nothing, keeps the
+#     state as it was and says so in the report (measured)
+#   - `for_each` + `nika:fetch` `mode: raw` with `max_items:`, `max_parallel:`,
+#     `timeout:`, `retry:` · a dead listing recovers to a MARKER, never a page
+#   - `nika:hash` · one fingerprint per page, so the report says whether a
+#     listing's page changed at all since the last run
+#   - links, images and their declared sizes found by jq regex · a score
+#     whose weights live in `const:`
+#   - the state-file pattern with `nika:json_diff` · the RFC 6902 patch names
+#     the listings that changed, and jq says which of them regressed
+#   - `nika:convert` to CSV with `formula_guard: true` · page titles are
+#     untrusted text, and a title such as `@scope/package` would otherwise
+#     open as a formula in a spreadsheet
+#   - `nika:chart` of the scores · `nika:inspect` folded into `run-report.json`
+#
+# Why there is a gate (NIKA-SEC-009 · measured on 0.125.0) · this boundary
+#   permits all three legs: a private read (the listings file, last run's
+#   state), untrusted ingress (the fetched pages) and external egress
+#   (`permits.net.http`, the same GETs). The check then requires a blocking
+#   `nika:prompt` (no `default:`) to dominate every task the page text
+#   reaches, and every path into the fetch, reads included: measured on an
+#   earlier draft without it, the check failed on the fetch itself and on
+#   each write the page text reached. So the gate sits at the ROOT, before
+#   the first byte is read, and every effect binds its answer. Leg one is
+#   any `permits.fs.read` entry: only moving the listings into `const:` AND
+#   dropping last run's state would remove it, and the « what regressed »
+#   section would go with it.
+#
+# Needs · nothing to rehearse. The sample listings sit on documentation hosts
+#   the engine never dials (RFC 2606/6761, measured), so every fetch
+#   recovers. The audit then reads the `rehearsal_html` sample the fixture
+#   carries for that listing and labels the row `rehearsal sample`; the fifth
+#   listing has no sample and reads `unreachable`. For your own listings, put
+#   their URLs in the fixture (drop the samples) and their exact hosts in
+#   `permits.net.http`.
+#
+# Run · nika run examples/listing-link-audit.nika
+#   It PAUSES at the `approve` gate when no one can answer (exit 4 · durable,
+#   not an error) · resume with `--resume <trace> --answer approve=true`, or
+#   answer in one pass: `--answer approve=true`. A « no » exits 0 and writes
+#   nothing. The first run compares against the committed seed of a last run
+#   and reports three regressions, one improvement and one removed listing;
+#   run it again and nothing has changed. `rm -rf out/listing-link-audit`
+#   resets the state to the seed.
+#   Limits, said plainly · this reads the HTML the server sends. A link or an
+#   image that a script adds after load is not in it, an `<img>` inside
+#   `<noscript>` counts twice, and an image's size is the `width`/`height` the
+#   page declares, never measured from the image file.
+
+nika: listing-link-audit
+
+run:
+  clock: system            # `pages` declares a `timeout:` · name the clock it rides
+
+inputs:
+  healthy_at:
+    type: integer
+    default: 90
+    description: "The score out of 100 from which a listing reads healthy"
+  broken_below:
+    type: integer
+    default: 60
+    description: "Below this score a listing reads broken · between the two it needs work"
+
+const:
+  listings_path: "examples/fixtures/listing-link-audit/listings.json"
+  # The score out of 100 · the share of required links present, the share
+  # of the minimum image count reached (capped at 1), and the share of the
+  # images that declare a size at least `min_image_width` wide (an image
+  # that declares no size is reported, not penalized).
+  weights: { links: 60, images: 25, sizes: 15 }
+
+permits:
+  exec: false
+  tools: ["nika:chart", "nika:convert", "nika:fetch", "nika:hash", "nika:inspect", "nika:jq", "nika:json_diff", "nika:prompt", "nika:read", "nika:validate", "nika:write"]
+  net:
+    # The URLs come from the fixture at RUN time, so `check` cannot see these
+    # hosts: each fetch is judged at run against this list, and a listing on
+    # a host not named here is refused (NIKA-SEC-004, measured), then
+    # recovered to the marker like any other dead listing. Exact names,
+    # never globs.
+    http:
+      - "apps.example.com"
+      - "catalog.example.com"
+      - "directory.example.org"
+      - "market.example.net"
+      - "registry.example.org"
+  fs:
+    # Last run's state is read where it is written; the committed seed only
+    # when that file does not exist yet.
+    read:
+      - "examples/fixtures/listing-link-audit/last-run.json"
+      - "examples/fixtures/listing-link-audit/listings.json"
+      - "out/listing-link-audit/state.json"
+    write:
+      - "out/listing-link-audit/listings.csv"
+      - "out/listing-link-audit/regressions.json"
+      - "out/listing-link-audit/report.json"
+      - "out/listing-link-audit/report.md"
+      - "out/listing-link-audit/run-report.json"
+      - "out/listing-link-audit/scores.svg"
+      - "out/listing-link-audit/state.json"
+
+tasks:
+  # ══ gather ═══════════════════════════════════════════════════════════
+  # The one gate, before anything is read or sent. No `default:` · the
+  # trifecta proof needs a person, not a scripted answer.
+  approve:
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: confirm
+        message: |
+          Fetch every listing page named in ${{ const.listings_path }} (GET only,
+          at most 50, three at a time, only to the hosts in permits.net.http),
+          compare them with the last run and rewrite out/listing-link-audit/?
+          The page text is read as data · nothing from it is sent anywhere.
+
+  raw:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.listings_path }}" }
+
+  seed:
+    with:
+      go: ${{ tasks.approve.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:read"
+      args: { path: "examples/fixtures/listing-link-audit/last-run.json" }
+
+  # First run: no state yet · only not-found is forgiven, and it falls back
+  # to the committed seed of a last run.
+  previous_raw:
+    with:
+      go: ${{ tasks.approve.output }}
+      seed: ${{ tasks.seed.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:read"
+      args: { path: "out/listing-link-audit/state.json" }
+    on_error:
+      on_codes: [NIKA-BUILTIN-READ-001]
+      recover: ${{ tasks.seed.output }}
+
+  # ══ normalize ════════════════════════════════════════════════════════
+  # `nika:read` returns TEXT · `fromjson` is where it becomes data.
+  config:
+    with:
+      raw: ${{ tasks.raw.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: "${{ with.raw }}"
+        expression: "if . == null then null else fromjson end"
+
+  config_check:
+    with:
+      config: ${{ tasks.config.output }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.config }}"
+        schema:
+          type: object
+          required: [required_links, min_images, min_image_width, listings]
+          properties:
+            required_links:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                required: [label, href]
+                properties:
+                  label: { type: string }
+                  href: { type: string, pattern: "^https?://" }
+            min_images: { type: integer, minimum: 0 }
+            min_image_width: { type: integer, minimum: 1 }
+            listings:
+              type: array
+              items:
+                type: object
+                required: [id, name, url]
+                properties:
+                  id: { type: string, pattern: "^[a-z0-9-]+$" }
+                  name: { type: string }
+                  url: { type: string, pattern: "^https://" }
+                  rehearsal_html: { type: string }
+
+  # The recovery is a marker, not sample HTML. Measured: recovering
+  # `${{ item.rehearsal_html }}` here fails NIKA-VAR-001 for a listing that
+  # carries no sample, and a page recovered as HTML could not be told apart
+  # from a fetched one. `bodies` decides what a marker means.
+  pages:
+    with:
+      go: ${{ tasks.approve.output }}
+      valid: ${{ tasks.config_check.output.valid }}
+      config: ${{ tasks.config.output }}
+    when: ${{ with.go == true && with.valid == true }}   # an invalid file fetches nothing
+    for_each:
+      items: ${{ with.config.listings }}
+      max_items: 50                  # a longer list is refused before the first fetch
+      max_parallel: 3                # three in flight · somebody else's server
+      fail_fast: false               # one dead listing must not stop the audit
+    timeout: "20s"
+    retry:
+      max_attempts: 2                # a GET replays nothing · one more try before the marker
+      backoff_ms: 500
+    on_error:
+      recover: { unreachable: true }
+    invoke:
+      tool: "nika:fetch"
+      args:
+        url: "${{ item.url }}"
+        mode: raw                    # the HTML as sent · the links and <img> tags are in it
+
+  # A for_each output is in ITEM ORDER, so `transpose` puts each page back
+  # beside its own listing. A string is a fetched page; the marker falls back
+  # to the listing's sample when it has one, and is `unreachable` otherwise.
+  # An invalid listings file audits nothing.
+  bodies:
+    with:
+      config: ${{ tasks.config.output }}
+      check: ${{ tasks.config_check.output }}
+      pages: ${{ tasks.pages.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { config: "${{ with.config }}", check: "${{ with.check }}", pages: "${{ with.pages }}" }
+        expression: >-
+          if .check.valid != true then [] else
+          [(.config.listings // []), (.pages // [])] | transpose
+          | map(select(.[0] != null) | .[0] as $l | .[1] as $p
+              | if ($p | type) == "string" then { id: $l.id, source: "live", html: $p }
+                elif $l.rehearsal_html != null then { id: $l.id, source: "rehearsal sample", html: $l.rehearsal_html }
+                else { id: $l.id, source: "unreachable", html: "" } end)
+          end
+
+  # No `when:` here · a guard that read the page text would let that text
+  # choose the branch (the check's [branch-steering] hint). An empty list
+  # simply hashes nothing.
+  hashes:
+    with:
+      bodies: ${{ tasks.bodies.output }}
+    for_each:
+      items: ${{ with.bodies }}
+      max_parallel: 4
+    invoke:
+      tool: "nika:hash"
+      args: { content: "${{ item.html }}", algo: blake3 }
+
+  # Last run's state is input from the last run, or a hand edit · checked
+  # before it is trusted. `format: yaml` parses the text first (JSON is
+  # YAML). An invalid file is set aside: every listing then reads as new.
+  previous_check:
+    with:
+      go: ${{ tasks.approve.output }}
+      raw: ${{ tasks.previous_raw.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.raw }}"
+        format: yaml
+        schema:
+          type: object
+          required: [listings]
+          properties:
+            listings:
+              type: object
+              additionalProperties:
+                type: object
+                required: [score, verdict]
+                properties:
+                  score: { type: number }
+                  verdict: { type: string }
+
+  # ══ judge ════════════════════════════════════════════════════════════
+  # The join of the listings, their pages and the page fingerprints. Hrefs
+  # are normalized once (a root-relative href made absolute against the
+  # listing's origin, then query, fragment and trailing slash dropped, case
+  # folded) before they meet the required set.
+  audit:
+    with:
+      config: ${{ tasks.config.output }}
+      bodies: ${{ tasks.bodies.output }}
+      hashes: ${{ tasks.hashes.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { config: "${{ with.config }}", bodies: "${{ with.bodies }}", hashes: "${{ with.hashes }}", w: "${{ const.weights }}", healthy_at: "${{ inputs.healthy_at }}", broken_below: "${{ inputs.broken_below }}" }
+        expression: >-
+          def norm: sub("[?#].*$"; "") | rtrimstr("/") | ascii_downcase;
+          .config as $c | .w as $w | .healthy_at as $healthy | .broken_below as $broken
+          | ($c.required_links // [] | length) as $nreq
+          | [(.bodies // []), (.hashes // [])] | transpose
+          | map(.[0] as $b | .[1] as $hash
+              | ($c.listings[] | select(.id == $b.id)) as $l
+              | { id: $l.id, name: $l.name, url: $l.url, source: $b.source }
+                + (if $b.source == "unreachable" then
+                     { title: null, score: 0, verdict: "unreachable", issues: ["the page did not load"],
+                       missing: null, images: null, undersized: null, unsized: null, sizes: null, page_hash: null }
+                   else
+                     ($l.url | capture("^(?<o>[a-z]+://[^/]+)") | .o) as $origin
+                     | ([$b.html | scan("(?i)href\\s*=\\s*[\"']([^\"']+)[\"']") | .[0]
+                         | if startswith("/") and (startswith("//") | not) then $origin + . else . end | norm] | unique) as $hrefs
+                     | [$b.html | scan("(?i)<img\\b[^>]*>")
+                         | { w: ((capture("(?i)\\swidth\\s*=\\s*[\"']?(?<v>[0-9]+)") | .v | tonumber) // null),
+                             h: ((capture("(?i)\\sheight\\s*=\\s*[\"']?(?<v>[0-9]+)") | .v | tonumber) // null) }] as $imgs
+                     | [$c.required_links[] | (.href | norm) as $h | select(any($hrefs[]; . == $h) | not) | .label] as $missing
+                     | ($imgs | map(select(.w != null))) as $sized
+                     | ($sized | map(select(.w < $c.min_image_width)) | length) as $under
+                     | (($imgs | length) - ($sized | length)) as $unsized
+                     | ((($nreq - ($missing | length)) / $nreq) * $w.links
+                        + ([($imgs | length) / $c.min_images, 1] | min) * $w.images
+                        + (if ($sized | length) == 0 then 1 else (($sized | length) - $under) / ($sized | length) end) * $w.sizes
+                        | round) as $score
+                     | { title: (([$b.html | scan("(?is)<title[^>]*>(.*?)</title>") | .[0]] | first // null) | if . == null then null else .[0:120] end),
+                         score: $score,
+                         verdict: (if $score >= $healthy then "healthy" elif $score >= $broken then "needs work" else "broken" end),
+                         issues: [ (if ($missing | length) > 0 then "missing: " + ($missing | join(", ")) else empty end),
+                                   (if ($imgs | length) < $c.min_images then "images " + ($imgs | length | tostring) + " of " + ($c.min_images | tostring) else empty end),
+                                   (if $under > 0 then ($under | tostring) + " image(s) narrower than " + ($c.min_image_width | tostring) + " px" else empty end),
+                                   (if $unsized > 0 then ($unsized | tostring) + " image(s) declare no size" else empty end) ],
+                         missing: $missing, images: ($imgs | length), undersized: $under, unsized: $unsized,
+                         sizes: ($sized | map((.w | tostring) + "x" + (if .h == null then "?" else (.h | tostring) end))),
+                         page_hash: $hash }
+                   end))
+
+  # The state this run leaves, and the one it found (an invalid state file
+  # reads as an empty one). Only the fields worth comparing are kept. An
+  # invalid listings file changes nothing: the state is carried over as it
+  # was, so no listing reads as removed (measured).
+  state:
+    with:
+      audit: ${{ tasks.audit.output }}
+      raw: ${{ tasks.previous_raw.output }}
+      check: ${{ tasks.previous_check.output }}
+      config_check: ${{ tasks.config_check.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { audit: "${{ with.audit }}", raw: "${{ with.raw }}", check: "${{ with.check }}", config_check: "${{ with.config_check }}" }
+        expression: >-
+          (.check.valid == true) as $valid
+          | (if $valid then (.raw | fromjson | { listings: .listings }) else { listings: {} } end) as $before
+          | { previous_valid: $valid,
+              before: $before,
+              after: (if .config_check.valid != true then $before
+                      else { listings: (.audit // [] | map({ key: .id, value: { name, url, verdict, score, missing, images, undersized, page_hash } }) | from_entries) } end) }
+
+  changes:
+    with:
+      state: ${{ tasks.state.output }}
+    invoke:
+      tool: "nika:json_diff"
+      args: { before: "${{ with.state.before }}", after: "${{ with.state.after }}" }
+
+  # The second join · the patch says WHICH listings changed (the second
+  # segment of each op's path), the two states say how. Regressed: the score
+  # fell, a required link was lost, or the page stopped loading.
+  compare:
+    with:
+      state: ${{ tasks.state.output }}
+      ops: ${{ tasks.changes.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { state: "${{ with.state }}", ops: "${{ with.ops }}" }
+        expression: >-
+          .state.before.listings as $p | .state.after.listings as $n
+          | [(.ops // [])[] | .path | split("/") | .[2] | select(. != null)] | unique
+          | map(. as $id | $p[$id] as $b | $n[$id] as $a
+              | { id: $id, name: (($a // $b).name), before: ($b.score // null), after: ($a.score // null),
+                  lost_links: (if $a == null or $b == null then [] else ($a.missing // []) - ($b.missing // []) end),
+                  regained_links: (if $a == null or $b == null then [] else ($b.missing // []) - ($a.missing // []) end),
+                  page_changed: (if $a == null or $b == null or $a.page_hash == null then null else $a.page_hash != $b.page_hash end) }
+              | .change = (if $b == null then "new"
+                           elif $a == null then "removed"
+                           elif $a.verdict == "unreachable" and $b.verdict != "unreachable" then "regressed"
+                           elif .after < .before or (.lost_links | length) > 0 then "regressed"
+                           elif .after > .before then "improved"
+                           else "changed" end))
+          | { all: ., regressed: map(select(.change == "regressed")) }
+
+  # ══ act ══════════════════════════════════════════════════════════════
+  save_state:
+    with:
+      go: ${{ tasks.approve.output }}
+      state: ${{ tasks.state.output.after }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/listing-link-audit/state.json"
+        content: "${{ with.state }}"   # one value · the engine serializes it
+        create_dirs: true
+
+  # Written on every approved run, `[]` included · a file a downstream check
+  # can watch. Writing it only on a regression would leave last run's list
+  # in place on a clean run (measured on an earlier draft).
+  save_regressions:
+    with:
+      go: ${{ tasks.approve.output }}
+      regressed: ${{ tasks.compare.output.regressed }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/listing-link-audit/regressions.json"
+        content: "${{ with.regressed }}"
+        create_dirs: true
+
+  # ══ report ═══════════════════════════════════════════════════════════
+  report:
+    with:
+      config: ${{ tasks.config.output }}
+      config_check: ${{ tasks.config_check.output }}
+      audit: ${{ tasks.audit.output }}
+      compare: ${{ tasks.compare.output }}
+      previous_valid: ${{ tasks.state.output.previous_valid }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: { config: "${{ with.config }}", config_check: "${{ with.config_check }}", audit: "${{ with.audit }}", compare: "${{ with.compare }}", previous_valid: "${{ with.previous_valid }}" }
+        expression: >-
+          def count(f): map(select(f)) | length;
+          (.audit // []) as $a | (.compare.all // []) as $c
+          | { required_links: (.config.required_links // [] | map(.label)),
+              min_images: .config.min_images, min_image_width: .config.min_image_width,
+              listings_valid: (.config_check.valid == true),
+              listings_errors: (.config_check.errors // []),
+              headline: (if .config_check.valid != true
+                         then "The listings file failed validation (" + (.config_check.errors // [] | length | tostring) + " error(s)) · nothing was fetched and the state is unchanged"
+                         else ($a | count(.verdict == "healthy") | tostring) + " healthy · " + ($a | count(.verdict == "needs work") | tostring) + " need work · "
+                              + ($a | count(.verdict == "broken") | tostring) + " broken · " + ($a | count(.verdict == "unreachable") | tostring) + " unreachable · "
+                              + ($c | count(.change == "regressed") | tostring) + " regressed since the last run" end),
+              previous_valid: .previous_valid,
+              counts: { listings: ($a | length),
+                        healthy: ($a | count(.verdict == "healthy")), needs_work: ($a | count(.verdict == "needs work")),
+                        broken: ($a | count(.verdict == "broken")), unreachable: ($a | count(.verdict == "unreachable")),
+                        live: ($a | count(.source == "live")), rehearsal: ($a | count(.source == "rehearsal sample")),
+                        regressed: ($c | count(.change == "regressed")), improved: ($c | count(.change == "improved")),
+                        new: ($c | count(.change == "new")), removed: ($c | count(.change == "removed")),
+                        changed: ($c | count(.change == "changed")) },
+              verdicts: ($a | map({ id, score, verdict })),
+              changes: $c, listings: $a,
+              rows: ($a | sort_by(.score) | map("| " + (.name | gsub("\\|"; "/")) + " | " + (.score | tostring) + " | " + .verdict
+                       + " | " + (if (.issues | length) == 0 then "none" else (.issues | join(" · ")) end) + " | " + .source + " |") | join("\n")),
+              change_rows: (if ($c | length) == 0 then "- nothing changed since the last run"
+                            else $c | map("- " + .name + " · " + .change
+                              + (if .before != null and .after != null then " · score " + (.before | tostring) + " → " + (.after | tostring) else "" end)
+                              + (if (.lost_links | length) > 0 then " · lost " + (.lost_links | join(", ")) else "" end)
+                              + (if (.regained_links | length) > 0 then " · regained " + (.regained_links | join(", ")) else "" end)
+                              + (if .page_changed == false then " · page unchanged" else "" end)) | join("\n") end),
+              chart_rows: ($a | map({ listing: .name, score })),
+              csv_rows: ($a | map({ id, name, title, score, verdict, issues: (.issues | join(" · ")),
+                                    images, undersized, unsized, source, url })) }
+
+  csv:
+    with:
+      rows: ${{ tasks.report.output.csv_rows }}
+    invoke:
+      tool: "nika:convert"
+      args:
+        input: "${{ with.rows }}"
+        from: json
+        to: csv
+        columns: [id, name, title, score, verdict, issues, images, undersized, unsized, source, url]
+        formula_guard: true          # page titles are untrusted · `@…` `=…` open as formulas
+
+  save_csv:
+    with:
+      go: ${{ tasks.approve.output }}
+      csv: ${{ tasks.csv.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/listing-link-audit/listings.csv"
+        content: "${{ with.csv }}"
+        create_dirs: true
+
+  # No rows when the listings file was invalid, and empty data would fail
+  # NIKA-BUILTIN-CHART-001 · that run skips the chart.
+  chart:
+    with:
+      go: ${{ tasks.approve.output }}
+      rows: ${{ tasks.report.output.chart_rows }}
+    when: ${{ with.go == true && size(with.rows) > 0 }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.rows }}"
+        semantics: { listing: category, score: count }
+        chart: { type: bar, x: listing, y: score, title: "Listing score out of 100" }
+        out: "out/listing-link-audit/scores.svg"
+
+  save_json:
+    with:
+      go: ${{ tasks.approve.output }}
+      report: ${{ tasks.report.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/listing-link-audit/report.json"
+        create_dirs: true
+        content:
+          required_links: "${{ with.report.required_links }}"
+          min_images: "${{ with.report.min_images }}"
+          min_image_width: "${{ with.report.min_image_width }}"
+          listings_valid: "${{ with.report.listings_valid }}"
+          listings_errors: "${{ with.report.listings_errors }}"
+          counts: "${{ with.report.counts }}"
+          changes: "${{ with.report.changes }}"
+          listings: "${{ with.report.listings }}"
+
+  save_md:
+    with:
+      go: ${{ tasks.approve.output }}
+      report: ${{ tasks.report.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/listing-link-audit/report.md"
+        create_dirs: true
+        content: |
+          # Listing link audit
+
+          ${{ with.report.headline }}
+
+          ## Since the last run
+          ${{ with.report.change_rows }}
+
+          ## Every listing, worst first
+          | listing | score | verdict | issues | read from |
+          | --- | --- | --- | --- | --- |
+          ${{ with.report.rows }}
+
+          Scores in scores.svg · the same rows in listings.csv.
+
+  # `after: … terminal` admits every settled state, skipped included, so the
+  # cost is read once every effect has settled, whatever the gate said.
+  cost:
+    after:
+      chart: terminal
+      save_csv: terminal
+      save_json: terminal
+      save_md: terminal
+      save_regressions: terminal
+      save_state: terminal
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  save_run_report:
+    with:
+      go: ${{ tasks.approve.output }}
+      report: ${{ tasks.report.output }}
+      ops: ${{ tasks.changes.output }}
+      chart: ${{ tasks.chart.output }}
+      cost: ${{ tasks.cost.output }}
+    when: ${{ with.go == true }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/listing-link-audit/run-report.json"
+        create_dirs: true
+        content:
+          listings_valid: "${{ with.report.listings_valid }}"
+          counts: "${{ with.report.counts }}"
+          verdicts: "${{ with.report.verdicts }}"
+          decisions: "${{ with.report.changes }}"
+          previous_state_valid: "${{ with.report.previous_valid }}"
+          state_changes: "${{ with.ops }}"
+          chart: "${{ with.chart }}"
+          cost: "${{ with.cost }}"
+
+outputs:
+  verdicts:
+    value: ${{ tasks.report.output.verdicts }}
+    description: "One score out of 100 and one verdict per listing · healthy, needs work, broken or unreachable"
+  regressed:
+    value: ${{ tasks.compare.output.regressed }}
+    description: "The listings whose score fell, lost a required link or stopped loading since the last run"
+  counts:
+    value: ${{ tasks.report.output.counts }}
+    description: "Listings per verdict, per source and per change since the last run"

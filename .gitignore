@@ -1,2 +1,5 @@
 __pycache__/
 eval/results/
+# Recipe fixtures are evidence, whatever a contributor's own ignore rules say
+# (a personal `*.log` rule once left a recipe without its inputs).
+!examples/fixtures/**

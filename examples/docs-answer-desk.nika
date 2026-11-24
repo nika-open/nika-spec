@@ -1,0 +1,712 @@
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://nika.sh/spec/v1/workflow.schema.json
+#
+# showcase · T4 epic · support / internal knowledge
+#
+# « Chat with your docs », checked · a folder of product docs is cut into
+# passages by heading, each question pulls its best passages by keyword
+# overlap, and the model answers from those passages only, quoting them.
+# Every quote is then searched for in the very passage it claims to come
+# from. An answer counts as supported only when its quotes are really
+# there. The questions the desk could not answer are kept in a log that
+# survives between runs, so the docs team sees what keeps coming back.
+#
+# Demonstrates ·
+#   - phases · gather → normalize → judge → act → report, 28 tasks, two
+#     content branches (`answer`, `grep` run only when there is something
+#     to do) and the joins `verify`, `outcome`, `report`
+#   - `nika:convert` · the questions arrive as a spreadsheet export (CSV)
+#     and are checked by `nika:validate` before any of them is used
+#   - chunking by heading and retrieval by keyword overlap in `nika:jq`,
+#     each passage carrying its file and line range · offline, deterministic
+#   - the zero-call abstain · a question with no passage above the score
+#     floor never reaches the model
+#   - `infer.schema:` per question · an answer plus citations, each a
+#     passage id AND a verbatim quote
+#   - the verification pass · one `nika:grep` per citation, the quote
+#     regex-escaped so it matches only itself, accepted only when the match
+#     lands inside the cited passage's lines
+#   - the citation law, proven on a fixture page with hand-computed
+#     verdicts by the one `nika:assert`, through the SAME grep pass
+#   - the unanswered log · `nika:hash` keys per question, merged with
+#     `nika:json_merge_patch` (`null` closes a question that now verifies)
+#   - `nika:chart` · per doc, passages in the corpus, given to a question,
+#     verified by a quote · `nika:inspect` cost in run-report.json, written
+#     on every run, a red one included
+#
+# Run · nika run examples/docs-answer-desk.nika --model mock/echo
+#   Nothing leaves the machine: no fetch, no network grant, so no gate. Four
+#   of the five sample questions find passages, and the fifth is unanswered
+#   with zero model calls. mock/echo cites a passage id « mock » it was never
+#   given, so its four answers are unsupported and no quote of theirs is
+#   searched. The law case still runs four real searches. A second run
+#   finds the same five questions open and counts them twice in the log.
+#   A real model quoting its passages turns them supported and closes them.
+
+nika: docs-answer-desk
+
+model: ollama/qwen3.5:4b   # local · zero key · the docs stay on this machine
+
+inputs:
+  top_k:
+    type: integer
+    default: 2
+    description: "Passages handed to the model per question"
+  min_score:
+    type: integer
+    default: 2
+    description: "Distinct question keywords a passage must carry to count as support"
+
+const:
+  docs_glob: "examples/fixtures/docs-answer-desk/docs/*.md"
+  questions_path: "examples/fixtures/docs-answer-desk/questions.csv"
+  log_path: "out/docs-answer-desk/unanswered-log.json"
+  law_page: "examples/fixtures/docs-answer-desk/law-case.md"
+  # The answer budget · `per_call_tokens` MUST equal `answer.infer.max_tokens`
+  # (a literal there): at most budget ÷ per-call questions reach the model,
+  # the rest are listed as deferred.
+  token_budget: 10000
+  per_call_tokens: 500
+  # Words too common to say what a question is about, plus the product's
+  # own name, which every page carries.
+  stopwords: [about, after, and, are, before, but, can, could, did, does, for, from, get,
+              has, have, how, into, its, may, not, our, should, that, the, their, then,
+              there, these, this, tidewren, what, when, where, which, while, who, why,
+              will, with, would, you, your]
+  questions_schema:
+    type: array
+    minItems: 1
+    maxItems: 200
+    items:
+      type: object
+      required: [id, text]
+      properties:
+        id: { type: string, pattern: "^[a-z0-9][a-z0-9-]{0,31}$" }
+        text: { type: string, minLength: 3, maxLength: 300 }
+  log_schema:
+    type: object
+    required: [version, open]
+    properties:
+      version: { const: 1 }
+      open:
+        type: object
+        additionalProperties:
+          type: object
+          required: [id, text, reason, first_seen, last_seen, runs]
+          properties:
+            first_seen: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            last_seen: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+            runs: { type: integer, minimum: 1 }
+  # The citation law, proven on `law_page` with verdicts computed by hand:
+  # a clean quote · a good quote beside one whose parentheses only an
+  # UNescaped pattern would match · a real quote from the wrong passage ·
+  # a passage it was not given · a failed call · no citation at all.
+  law_case:
+    asked:
+      - { id: a, text: "A?", chunks: [{ id: "law-case#refunds" }] }
+      - { id: b, text: "B?", chunks: [{ id: "law-case#refunds" }] }
+      - { id: c, text: "C?", chunks: [{ id: "law-case#access" }] }
+      - { id: d, text: "D?", chunks: [{ id: "law-case#refunds" }] }
+      - { id: e, text: "E?", chunks: [{ id: "law-case#refunds" }] }
+      - { id: f, text: "F?", chunks: [{ id: "law-case#refunds" }] }
+    answers:
+      - { answer: "x", confidence: high, citations: [{ chunk_id: "law-case#refunds", quote: "refunded in full within 14 days" }] }
+      - { answer: "x", confidence: medium, citations: [{ chunk_id: "law-case#refunds", quote: "Monthly plans are not refunded." },
+                                                        { chunk_id: "law-case#refunds", quote: "refunded (in full)" }] }
+      - { answer: "x", confidence: high, citations: [{ chunk_id: "law-case#access", quote: "within 14 days of purchase" }] }
+      - { answer: "x", confidence: high, citations: [{ chunk_id: "law-case#access", quote: "ends their access at once" }] }
+      - null
+      - { answer: "x", confidence: low, citations: [] }
+  law_want:
+    - { id: a, status: supported, outside: [] }
+    - { id: b, status: partial, outside: [] }
+    - { id: c, status: unsupported, outside: [] }
+    - { id: d, status: unsupported, outside: ["law-case#access"] }
+    - { id: e, status: failed, outside: [] }
+    - { id: f, status: unsupported, outside: [] }
+
+permits:
+  tools: ["nika:assert", "nika:chart", "nika:convert", "nika:date", "nika:glob", "nika:grep", "nika:hash",
+          "nika:inspect", "nika:jq", "nika:json_merge_patch", "nika:read", "nika:validate", "nika:write"]
+  fs:
+    read:
+      # `nika:glob` gates its walk ROOT (the directory); `nika:read` and
+      # `nika:grep` gate each FILE. `*.md` is one segment, so a page in a
+      # subfolder is never read. The log is read AND written at one path.
+      - "examples/fixtures/docs-answer-desk/docs"
+      - "examples/fixtures/docs-answer-desk/docs/*.md"
+      - "examples/fixtures/docs-answer-desk/law-case.md"
+      - "examples/fixtures/docs-answer-desk/questions.csv"
+      - "out/docs-answer-desk/unanswered-log.json"
+    write:
+      - "out/docs-answer-desk/answers.json"
+      - "out/docs-answer-desk/answers.md"
+      - "out/docs-answer-desk/coverage.svg"
+      - "out/docs-answer-desk/run-report.json"
+      - "out/docs-answer-desk/unanswered-log.json"
+
+tasks:
+  # ═══ GATHER ═══════════════════════════════════════════════════════════
+  clock:
+    invoke:
+      tool: "nika:date"
+      args: { op: now }
+    extract:
+      day: ".[:10]"                         # nika:date returns the ISO string itself
+
+  paths:
+    invoke:
+      tool: "nika:glob"
+      args:
+        pattern: "${{ const.docs_glob }}"
+        exclude: "**/README.md"             # a folder README is not product documentation
+
+  pages:
+    with:
+      paths: ${{ tasks.paths.output }}
+    for_each:
+      items: ${{ with.paths }}
+      max_parallel: 4
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ item }}" }
+
+  law_page:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.law_page }}" }
+
+  questions_csv:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.questions_path }}" }
+
+  previous:
+    invoke:
+      tool: "nika:read"
+      args: { path: "${{ const.log_path }}" }
+    on_error:
+      on_codes: [NIKA-BUILTIN-READ-001]   # not-found ONLY · the first run · a permission error still fails loudly
+      recover: { version: 1, open: {} }
+
+  # ═══ NORMALIZE ════════════════════════════════════════════════════════
+  questions:
+    with:
+      csv: ${{ tasks.questions_csv.output }}
+    invoke:
+      tool: "nika:convert"
+      args: { input: "${{ with.csv }}", from: csv, to: json }   # every cell arrives as a string
+
+  questions_ok:
+    with:
+      questions: ${{ tasks.questions.output }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.questions }}"
+        schema: ${{ const.questions_schema }}
+
+  # `nika:read` returns TEXT; the first-run recovery is already an object.
+  # Text that does not parse becomes `null`, which the validation refuses.
+  log:
+    with:
+      previous: ${{ tasks.previous.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input: "${{ with.previous }}"
+        expression: 'if type == "string" then (try fromjson catch null) else . end'
+
+  log_ok:
+    with:
+      log: ${{ tasks.log.output }}
+    invoke:
+      tool: "nika:validate"
+      args:
+        data: "${{ with.log }}"
+        schema: ${{ const.log_schema }}
+
+  # Passages, cut at each `## ` heading. A for_each output is in ITEM
+  # ORDER, so `transpose` pairs each page with its path. A passage id is
+  # `<file>#<heading slug>`, and `from`/`to` are its 1-based lines, heading
+  # included, which the grep pass checks a quote against. The law page is
+  # cut by the same program, so the proof also covers the cutting.
+  chunks:
+    with:
+      paths: ${{ tasks.paths.output }}
+      pages: ${{ tasks.pages.output }}
+      law_page: ${{ tasks.law_page.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          paths: "${{ with.paths }}"
+          pages: "${{ with.pages }}"
+          law: { path: "${{ const.law_page }}", page: "${{ with.law_page }}" }
+        expression: >-
+          def chunk($path):
+            ($path | split("/") | last | sub("\\.md$"; "")) as $doc
+            | split("\n") as $lines
+            | ([0] + [range(0; $lines | length) | select($lines[.] | startswith("## "))] | unique) as $starts
+            | [range(0; $starts | length) as $k
+               | $starts[$k] as $s
+               | (if $k + 1 < ($starts | length) then $starts[$k + 1] else ($lines | length) end) as $e
+               | ($lines | .[$s:$e]) as $seg
+               | ($seg[0] | sub("^#+ +"; "")) as $heading
+               | { id: ($doc + "#" + ($heading | ascii_downcase | [scan("[a-z0-9]+")] | join("-"))),
+                   doc: $doc, path: $path, heading: $heading, from: ($s + 1), to: $e,
+                   text: ($seg[1:] | join(" ") | gsub("\\s+"; " ") | ltrimstr(" ") | rtrimstr(" ")) }]
+            | map(select(.text != ""));
+          { corpus: ([.paths, .pages] | transpose | map(.[0] as $p | .[1] | chunk($p)) | add // []),
+            law: (.law.path as $p | .law.page | chunk($p)) }
+
+  # Retrieval by keyword overlap. This binary's builtin catalog carries no
+  # embedding or search index, so retrieval is lexical: lower-case words of
+  # 3+ letters, stopwords out, a trailing `s` dropped from words of 5+
+  # letters (`plans` meets `plan`). A passage scores one point per distinct
+  # question keyword in its heading or text. The budget slices the asked
+  # list; the questions past it are deferred, never dropped.
+  retrieve:
+    with:
+      chunks: ${{ tasks.chunks.output }}
+      questions: ${{ tasks.questions.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          chunks: "${{ with.chunks.corpus }}"
+          questions: "${{ with.questions }}"
+          stop: ${{ const.stopwords }}
+          k: "${{ inputs.top_k }}"
+          floor: "${{ inputs.min_score }}"
+          budget: ${{ const.token_budget }}
+          per_call: ${{ const.per_call_tokens }}
+        expression: >-
+          (.stop | map({ (.): true }) | add) as $stop
+          | def keys_of: ascii_downcase | [scan("[a-z0-9]+")]
+              | map(select(length >= 3) | if length >= 5 then sub("s$"; "") else . end)
+              | map(select($stop[.] != true)) | unique;
+          .k as $k | .floor as $floor
+          | ((.budget / .per_call) | floor) as $afford
+          | (.chunks | map(. + { keys: ((.heading + " " + .text) | keys_of) })) as $chunks
+          | (.questions
+             | map(. + { norm: (.text | ascii_downcase | [scan("[a-z0-9']+")] | join(" ")),
+                         hits: ((.text | keys_of) as $q
+                                | $chunks
+                                | map({ id, path, from, to, heading, text,
+                                        score: (.keys as $c | $q | map(select(. as $w | $c | index([$w]) != null)) | length) })
+                                | map(select(.score >= $floor))
+                                | sort_by([-.score, .id])
+                                | .[:$k]) })) as $qs
+          | ($qs | map(select((.hits | length) > 0))) as $found
+          | { norms: ($qs | map({ id, norm })),
+              affordable: $afford,
+              asked: ($found[:$afford]
+                      | map({ id, text, chunks: .hits,
+                              context: (.hits | map("[" + .id + "] " + .heading + " · " + .text) | join("\n\n")) })),
+              unanswered: (($qs | map(select((.hits | length) == 0)
+                                      | { id, text, kind: "no-passage", reason: "no passage shares enough keywords with it" }))
+                           + ($found[$afford:] | map({ id, text, kind: "deferred", reason: "deferred · over this run's token budget" }))) }
+
+  # One blake3 key per question, of its normalized text: the log follows a
+  # question across runs even when its id in the spreadsheet changes.
+  qkeys:
+    with:
+      retrieve: ${{ tasks.retrieve.output }}
+    for_each:
+      items: ${{ with.retrieve.norms }}
+      max_parallel: 8
+    invoke:
+      tool: "nika:hash"
+      args: { content: "${{ item.norm }}", algo: blake3 }
+
+  # ═══ JUDGE ════════════════════════════════════════════════════════════
+  answer:
+    with:
+      asked: ${{ tasks.retrieve.output.asked }}
+    when: ${{ size(with.asked) > 0 }}       # nothing retrievable · zero model calls
+    for_each:
+      items: ${{ with.asked }}
+      max_parallel: 2
+      max_items: 20                         # = token_budget ÷ per_call_tokens · `retrieve` slices to it, so this bounds the cost and never fires
+      fail_fast: false
+    on_error:
+      recover: null                         # a failed answer is reported as failed · the batch lives
+    infer:
+      # a reasoning model needs 16384 here, or a documented run.reasoning.effort: low
+      max_tokens: 500                       # = const.per_call_tokens
+      system: |
+        You answer support questions from the passages you are given and
+        nothing else. Each passage starts with its id in brackets. For each
+        passage you used, cite its id and copy a short quote from it word
+        for word, inside one sentence. If the passages do not answer the
+        question, say so and cite nothing.
+      prompt: |
+        Question · ${{ item.text }}
+
+        Passages ·
+        ${{ item.context }}
+      schema:
+        type: object
+        additionalProperties: false
+        required: [answer, citations, confidence]
+        properties:
+          answer: { type: string, maxLength: 600 }
+          citations:
+            type: array
+            maxItems: 3
+            items:
+              type: object
+              additionalProperties: false
+              required: [chunk_id, quote]
+              properties:
+                chunk_id: { type: string, maxLength: 120 }
+                quote: { type: string, minLength: 8, maxLength: 200 }
+          confidence: { type: string, enum: [low, medium, high] }
+
+  # Every citation worth searching, from this run AND from the law case: a
+  # citation of a passage the question was given. Its quote becomes a
+  # pattern that matches only itself. `key` names its origin, question and
+  # position, so `verify` finds each verdict again. One quote must sit on
+  # one line: grep reads line by line, and the docs keep a paragraph per
+  # line.
+  citations:
+    with:
+      asked: ${{ tasks.retrieve.output.asked }}
+      answers: ${{ tasks.answer.output }}
+      chunks: ${{ tasks.chunks.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          run: { asked: "${{ with.asked }}", answers: "${{ with.answers }}" }
+          case: ${{ const.law_case }}
+          chunks: "${{ with.chunks }}"
+        expression: >-
+          ((.chunks.corpus + .chunks.law) | map({ (.id): . }) | add // {}) as $byid
+          | def probes($origin):
+              [.asked, (.answers // [])] | transpose | to_entries
+              | map(select(.value[0] != null)
+                    | .key as $qi | .value[0] as $q | (.value[1] // {}) as $a
+                    | ($q.chunks | map(.id)) as $given
+                    | (($a.citations // []) | to_entries)
+                    | map(.key as $ci | .value as $c | ($byid[$c.chunk_id] // null) as $chunk
+                          | select($chunk != null and ($given | index([$c.chunk_id]) != null))
+                          | { key: ($origin + ":" + ($qi | tostring) + ":" + ($ci | tostring)),
+                              path: $chunk.path, from: $chunk.from, to: $chunk.to,
+                              pattern: ($c.quote | gsub("(?<c>[.*+?^$(){}|\\[\\]\\\\])"; "\\\(.c)")) }))
+              | add // [];
+          (.run | probes("run")) + (.case | probes("case"))
+
+  grep:
+    with:
+      probes: ${{ tasks.citations.output }}
+    when: ${{ size(with.probes) > 0 }}      # no citation to search · zero greps
+    for_each:
+      items: ${{ with.probes }}
+      max_parallel: 4
+    invoke:
+      tool: "nika:grep"
+      args: { pattern: "${{ item.pattern }}", path: "${{ item.path }}" }
+
+  # The citation law · ONE program applied twice, to this run's answers and
+  # to the law case, over the same grep results. A citation is verified
+  # when its passage was given AND its quote matched inside that passage's
+  # lines. Supported = every citation verified · partial = some ·
+  # unsupported = none, or no citation · failed = no answer.
+  verify:
+    with:
+      asked: ${{ tasks.retrieve.output.asked }}
+      answers: ${{ tasks.answer.output }}
+      probes: ${{ tasks.citations.output }}
+      hits: ${{ tasks.grep.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          run: { asked: "${{ with.asked }}", answers: "${{ with.answers }}" }
+          case: ${{ const.law_case }}
+          probes: "${{ with.probes }}"
+          hits: "${{ with.hits }}"
+        expression: >-
+          ([.probes, (.hits // [])] | transpose
+             | map(.[0] as $p | { ($p.key): ((.[1] // []) | any(.line >= $p.from and .line <= $p.to)) })
+             | add // {}) as $found
+          | def law($origin):
+              [.asked, (.answers // [])] | transpose | to_entries
+              | map(select(.value[0] != null)
+                    | .key as $qi | .value[0] as $q | .value[1] as $a
+                    | ($q.chunks | map(.id)) as $given
+                    | (if $a == null then { status: "failed", answer: null, confidence: null, citations: [], outside: [] }
+                       else ((($a.citations // []) | to_entries)
+                             | map(.key as $ci | .value
+                                   | . + { given: (.chunk_id as $c | $given | index([$c]) != null),
+                                           found: ($found[$origin + ":" + ($qi | tostring) + ":" + ($ci | tostring)] == true) }
+                                   | . + { verified: (.given and .found) })) as $cs
+                            | ($cs | map(select(.verified)) | length) as $v
+                            | { answer: $a.answer, confidence: $a.confidence, citations: $cs,
+                                outside: ($cs | map(select(.given | not) | .chunk_id) | unique),
+                                status: (if $v == 0 then "unsupported"
+                                         elif $v == ($cs | length) then "supported" else "partial" end) }
+                       end)
+                    + { id: $q.id, question: $q.text, given: $given });
+          { result: (.run | law("run")), proof: (.case | law("case")),
+            probes: { run: (.probes | map(select(.key | startswith("run:"))) | length),
+                      case: (.probes | map(select(.key | startswith("case:"))) | length) } }
+
+  # Every invariant the writes depend on, folded into one verdict.
+  invariants:
+    with:
+      verify: ${{ tasks.verify.output }}
+      affordable: ${{ tasks.retrieve.output.affordable }}
+      questions_ok: ${{ tasks.questions_ok.output }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          proof: "${{ with.verify.proof }}"
+          want: ${{ const.law_want }}
+          answered: "${{ with.verify.result }}"
+          affordable: "${{ with.affordable }}"
+          questions_valid: "${{ with.questions_ok.valid }}"
+        expression: >-
+          { law: ((.proof | map({ id, status, outside })) == .want),
+            questions: .questions_valid,
+            budget: ((.answered | length) <= .affordable) }
+          | . + { all: (.law and .questions and .budget) }
+
+  # Every write waits on this assert. `check` prints one advisory
+  # [assert-quarantine] hint for this task: it fires on any file that both
+  # asserts and writes, and dropping the assert would trade it for the
+  # paid-run [unproven-law] hint.
+  law_holds:
+    with:
+      verdict: ${{ tasks.invariants.output }}
+    invoke:
+      tool: "nika:assert"
+      args:
+        condition: "${{ with.verdict.all }}"
+        message: "an invariant failed (citation law · question schema · budget) · the answers, log and chart are blocked"
+
+  # ═══ ACT ══════════════════════════════════════════════════════════════
+  # One jq pass builds what lands: the log patch (an open question gets its
+  # dates and run count; a logged question that now verifies gets `null`,
+  # which closes it), the answers as a value and as prose, and the chart
+  # rows. A log that failed validation is replaced by an empty one.
+  outcome:
+    with:
+      log: ${{ tasks.log.output }}
+      log_ok: ${{ tasks.log_ok.output }}
+      verify: ${{ tasks.verify.output }}
+      retrieve: ${{ tasks.retrieve.output }}
+      keys: ${{ tasks.qkeys.output }}
+      chunks: ${{ tasks.chunks.output }}
+      day: ${{ tasks.clock.day }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          log: "${{ with.log }}"
+          log_valid: "${{ with.log_ok.valid }}"
+          result: "${{ with.verify.result }}"
+          retrieve: "${{ with.retrieve }}"
+          keys: "${{ with.keys }}"
+          corpus: "${{ with.chunks.corpus }}"
+          day: "${{ with.day }}"
+        expression: >-
+          (if .log_valid then .log else { version: 1, open: {} } end) as $base
+          | .day as $day | .result as $result | .retrieve.unanswered as $unanswered
+          | ([.retrieve.norms, (.keys // [])] | transpose | map({ (.[0].id): .[1] }) | add // {}) as $key
+          | (($result | map(select(.status != "supported") | { id, text: .question, reason: ("answer " + .status) }))
+             + ($unanswered | map(select(.kind == "no-passage") | { id, text, reason: "no passage" }))) as $open
+          | ($result | map(select(.status == "supported") | $key[.id] | select(. != null and $base.open[.] != null))) as $closed
+          | ([.retrieve.asked[].chunks[].id] | unique) as $given_ids
+          | ([$result[].citations[] | select(.verified) | .chunk_id] | unique) as $verified_ids
+          | ($result | map(select(.status == "supported")) | length) as $ok
+          | ($result | map(select(.status == "partial")) | length) as $partial
+          | ($result | map(select(.status == "unsupported")) | length) as $bad
+          | ($result | map(select(.status == "failed")) | length) as $failed
+          | { reset: (.log_valid | not),
+              base: $base,
+              log: { opened: ($open | map(select($base.open[$key[.id]] == null)) | length),
+                     still_open: ($open | map(select($base.open[$key[.id]] != null)) | length),
+                     closed: ($closed | length) },
+              patch: { version: 1,
+                       open: (($open | map($key[.id] as $h
+                                           | { ($h): (. + { first_seen: ($base.open[$h].first_seen // $day),
+                                                            last_seen: $day,
+                                                            runs: (($base.open[$h].runs // 0) + 1) }) })
+                                     | add // {})
+                              + ($closed | map({ (.): null }) | add // {})) },
+              rows: (.corpus | group_by(.doc)
+                     | map(.[0].doc as $d
+                           | [{ doc: $d, measure: "1 passages", count: length },
+                              { doc: $d, measure: "2 given to a question",
+                                count: (map(select(.id as $i | $given_ids | index([$i]) != null)) | length) },
+                              { doc: $d, measure: "3 verified by a quote",
+                                count: (map(select(.id as $i | $verified_ids | index([$i]) != null)) | length) }])
+                     | add // []),
+              answers: { day: $day, asked: ($result | length), supported: $ok, partial: $partial,
+                         unsupported: $bad, failed: $failed, answers: $result, unanswered: $unanswered },
+              markdown: ("# Answers from the docs · " + $day + "\n\n"
+                + ($result | length | tostring) + " answered from passages · "
+                + ($ok | tostring) + " supported · " + ($partial | tostring) + " partial · "
+                + ($bad | tostring) + " unsupported · " + ($failed | tostring) + " failed · "
+                + ($unanswered | length | tostring) + " unanswered with no model call\n\n"
+                + ($result
+                   | map("## " + .id + " · " + .question + "\n\n**" + .status + "**"
+                         + (if .confidence == null then "" else " · confidence " + .confidence end)
+                         + " · given " + (.given | join(", ")) + "\n\n"
+                         + (.answer // "(no answer · the call failed)")
+                         + (if (.citations | length) == 0 then "\n\n- cites nothing"
+                            else "\n\n" + (.citations
+                                           | map("- " + .chunk_id + " · « " + .quote + " » · "
+                                                 + (if .verified then "verified"
+                                                    elif (.given | not) then "NOT GIVEN to this question"
+                                                    else "quote NOT FOUND in the passage" end))
+                                           | join("\n"))
+                            end))
+                   | join("\n\n"))
+                + "\n\n## Unanswered\n\n"
+                + (if ($unanswered | length) == 0 then "None.\n"
+                   else ($unanswered | map("- " + .id + " · " + .text + " · " + .reason) | join("\n")) + "\n"
+                   end)) }
+
+  next_log:
+    with:
+      outcome: ${{ tasks.outcome.output }}
+    invoke:
+      tool: "nika:json_merge_patch"
+      args:
+        target: "${{ with.outcome.base }}"
+        patch: "${{ with.outcome.patch }}"
+
+  save_answers:
+    after: { law_holds: success }           # the invariants hold before a byte lands
+    with:
+      outcome: ${{ tasks.outcome.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/docs-answer-desk/answers.json"
+        content: "${{ with.outcome.answers }}"   # ONE value · the engine serializes it (CONVENTIONS §5)
+        create_dirs: true
+
+  save_md:
+    after: { law_holds: success }
+    with:
+      outcome: ${{ tasks.outcome.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/docs-answer-desk/answers.md"
+        content: "${{ with.outcome.markdown }}"
+        create_dirs: true
+
+  save_log:
+    after: { law_holds: success }
+    with:
+      next: ${{ tasks.next_log.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "${{ const.log_path }}"
+        content: "${{ with.next }}"
+        create_dirs: true
+        overwrite: true
+
+  chart:
+    after: { law_holds: success }
+    with:
+      outcome: ${{ tasks.outcome.output }}
+    invoke:
+      tool: "nika:chart"
+      args:
+        data: "${{ with.outcome.rows }}"
+        semantics: { doc: category, measure: category, count: count }
+        chart: { type: bar, x: doc, y: count, color: measure, title: "Passages per doc · in the corpus, given to a question, verified by a quote" }
+        out: "out/docs-answer-desk/coverage.svg"
+
+  # ═══ REPORT · always, once the effects have settled ═══════════════════
+  cost:
+    after: { save_answers: terminal, save_md: terminal, save_log: terminal, chart: terminal }
+    invoke:
+      tool: "nika:inspect"
+      args: { view: cost }
+
+  # Always-run: `after: … terminal` admits every settled state of the
+  # writes, which it reads by `status` only. Its VALUES come from tasks the
+  # assert does not gate, so a red run still explains itself.
+  report:
+    after: { save_answers: terminal, save_md: terminal, save_log: terminal, chart: terminal }
+    with:
+      day: ${{ tasks.clock.day }}
+      questions: ${{ tasks.questions.output }}
+      retrieve: ${{ tasks.retrieve.output }}
+      verify: ${{ tasks.verify.output }}
+      verdict: ${{ tasks.invariants.output }}
+      outcome: ${{ tasks.outcome.output }}
+      cost: ${{ tasks.cost.output }}
+      s_answers: ${{ tasks.save_answers.status }}
+      s_md: ${{ tasks.save_md.status }}
+      s_log: ${{ tasks.save_log.status }}
+      s_chart: ${{ tasks.chart.status }}
+      s_answer: ${{ tasks.answer.status }}
+      s_grep: ${{ tasks.grep.status }}
+    invoke:
+      tool: "nika:jq"
+      args:
+        input:
+          day: "${{ with.day }}"
+          questions: "${{ with.questions }}"
+          retrieve: "${{ with.retrieve }}"
+          verify: "${{ with.verify }}"
+          verdict: "${{ with.verdict }}"
+          outcome: "${{ with.outcome }}"
+          cost: "${{ with.cost }}"
+          status: { answers: "${{ with.s_answers }}", markdown: "${{ with.s_md }}", log: "${{ with.s_log }}",
+                    chart: "${{ with.s_chart }}", answer: "${{ with.s_answer }}", grep: "${{ with.s_grep }}" }
+        expression: >-
+          { workflow: "docs-answer-desk",
+            day: .day,
+            counts: { questions: (.questions | length),
+                      asked: (.retrieve.asked | length),
+                      no_passage: (.retrieve.unanswered | map(select(.kind == "no-passage")) | length),
+                      deferred: (.retrieve.unanswered | map(select(.kind == "deferred")) | length),
+                      supported: .outcome.answers.supported, partial: .outcome.answers.partial,
+                      unsupported: .outcome.answers.unsupported, failed: .outcome.answers.failed,
+                      greps: .verify.probes },
+            decisions: { answering: (if .status.answer == "skipped" then "skipped · no question found a passage" else "ran" end),
+                         verification: (if .status.grep == "skipped" then "skipped · no citation of a given passage" else "ran" end),
+                         log: (if .status.log != "success" then "not written · " + .status.log
+                               elif .outcome.reset then "reset · the stored log failed its schema" else "merged" end) },
+            log_change: .outcome.log,
+            verdicts: .verdict,
+            tasks: .status,
+            cost: .cost }
+
+  # `after: law_holds terminal` makes this the record of a red run as well:
+  # measured, the engine's quarantine then leaves this file in place while
+  # the run's other writes are blocked (without it, a report the red run
+  # created is moved to .nika/quarantine/<trace>/).
+  save_report:
+    after: { law_holds: terminal }
+    with:
+      report: ${{ tasks.report.output }}
+    invoke:
+      tool: "nika:write"
+      args:
+        path: "out/docs-answer-desk/run-report.json"
+        content: "${{ with.report }}"       # ONE value · the engine serializes it (CONVENTIONS §5)
+        create_dirs: true
+
+outputs:
+  answers:
+    value: ${{ tasks.verify.output.result }}
+    description: "One row per answered question · status supported | partial | unsupported | failed, the passages it was given, each citation with its verdict"
+  unanswered:
+    value: ${{ tasks.retrieve.output.unanswered }}
+    description: "Questions no passage supported, or past the budget · they cost zero model calls"
+  report:
+    value: ${{ tasks.report.output }}
+    description: "The run report · counts per branch, decisions, verdicts, log changes and the run's own cost"

@@ -1,0 +1,102 @@
+{
+  "register": "pending-refunds",
+  "company": "Quarry Lane Studio",
+  "note": "Invented claims for the refund-chaser example. Every vendor, contact, reference and amount is fictional; contacts use example.com, example.org and example.net.",
+  "claims": {
+    "RF-2611-01": {
+      "vendor": "Kestrel CI",
+      "kind": "double_charge",
+      "language": "en",
+      "opened_on": "2026-10-02",
+      "amount": "49.00",
+      "currency": "EUR",
+      "reference": "invoice KC-2026-0931 charged twice on 2026-09-30",
+      "contact": { "name": "Kestrel CI Billing", "email": "billing@kestrel-ci.example.com" },
+      "status": "open",
+      "last_contact_on": "2026-11-10",
+      "reminders": [
+        { "n": 1, "sent_on": "2026-10-09" },
+        { "n": 2, "sent_on": "2026-11-10" }
+      ]
+    },
+    "RF-2611-02": {
+      "vendor": "Atelier Nuage",
+      "kind": "cancelled_still_billed",
+      "language": "fr",
+      "opened_on": "2026-11-03",
+      "amount": "29.00",
+      "currency": "EUR",
+      "reference": "abonnement Studio résilié le 2026-10-15, prélevé le 2026-11-01",
+      "contact": { "name": "Service facturation Atelier Nuage", "email": "facturation@atelier-nuage.example.org" },
+      "status": "open",
+      "last_contact_on": "2026-11-17",
+      "reminders": [
+        { "n": 1, "sent_on": "2026-11-17" }
+      ]
+    },
+    "RF-2611-03": {
+      "vendor": "Tessera Design",
+      "kind": "disputed_invoice",
+      "language": "en",
+      "opened_on": "2026-11-12",
+      "amount": "180.00",
+      "currency": "EUR",
+      "reference": "invoice TD-90127 bills 4 seats, the plan has 2",
+      "contact": { "name": "Tessera Accounts Receivable", "email": "ar@tessera-design.example.net" },
+      "status": "open",
+      "last_contact_on": "2026-11-20",
+      "reminders": [
+        { "n": 1, "sent_on": "2026-11-20" }
+      ]
+    },
+    "RF-2611-04": {
+      "vendor": "Postlark Mail",
+      "kind": "double_charge",
+      "language": "en",
+      "opened_on": "2026-09-15",
+      "amount": "15.00",
+      "currency": "EUR",
+      "reference": "invoice PL-54410 charged twice on 2026-09-02",
+      "contact": { "name": "Postlark Support", "email": "support@postlark.example.com" },
+      "status": "refunded",
+      "refunded_on": "2026-11-21",
+      "refunded_amount": "15.00",
+      "last_contact_on": "2026-11-05",
+      "reminders": [
+        { "n": 1, "sent_on": "2026-09-22" },
+        { "n": 2, "sent_on": "2026-10-06" },
+        { "n": 3, "sent_on": "2026-11-05" }
+      ]
+    },
+    "RF-2611-05": {
+      "vendor": "Hearth HR",
+      "kind": "cancelled_still_billed",
+      "language": "en",
+      "opened_on": "2026-11-14",
+      "amount": "120.00",
+      "currency": "EUR",
+      "reference": "Payroll add-on cancelled 2026-10-31, billed on invoice HH-2026-1102",
+      "contact": { "name": "Hearth HR Billing", "email": "billing@hearth-hr.example.com" },
+      "status": "open",
+      "last_contact_on": "2026-11-14",
+      "reminders": []
+    },
+    "RF-2611-06": {
+      "vendor": "Driftwood Backup",
+      "kind": "disputed_invoice",
+      "language": "en",
+      "opened_on": "2026-08-28",
+      "amount": "64.00",
+      "currency": "EUR",
+      "reference": "invoice DW-2026-0388 bills an overage the usage report does not show",
+      "contact": { "name": "Driftwood Backup Finance", "email": "finance@driftwood-backup.example.net" },
+      "status": "open",
+      "last_contact_on": "2026-10-30",
+      "reminders": [
+        { "n": 1, "sent_on": "2026-09-04" },
+        { "n": 2, "sent_on": "2026-09-25" },
+        { "n": 3, "sent_on": "2026-10-30" }
+      ]
+    }
+  }
+}

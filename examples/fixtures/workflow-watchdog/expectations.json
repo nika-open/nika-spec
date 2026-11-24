@@ -1,0 +1,7 @@
+[
+  {"workflow": "invoice-sync", "cadence_hours": 2, "cost_ceiling_usd": 0.2},
+  {"workflow": "nightly-export", "cadence_hours": 24, "cost_ceiling_usd": 0.5},
+  {"workflow": "lead-enrichment", "cadence_hours": 12, "cost_ceiling_usd": 1.0},
+  {"workflow": "crm-backup", "cadence_hours": 24, "cost_ceiling_usd": 1.0},
+  {"workflow": "weekly-digest", "cadence_hours": 168, "cost_ceiling_usd": 2.0}
+]
