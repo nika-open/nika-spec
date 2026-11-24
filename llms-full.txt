@@ -8648,9 +8648,9 @@ and a reader of the record MUST be able to see it
 · (d) **expiring** — every record carries an expiry, 31 days by
 default. The person MAY remove it, except where the workflow's
 `permits:` let it send data out or launch programs: there the expiry
-MUST NOT be removed, because what a launched program does is not
-bound by the record. An expired record does not apply and the gate
-re-prompts
+MUST NOT be removed, because neither what a later run sends nor what
+a launched program does is bound by the record. An expired record
+does not apply and the gate re-prompts
 · (e) **`permits:` required** — a workflow with no `permits:` block
 MUST NOT receive a record. The record names the **effect level** it
 lets through, one of five in ascending order: *reads only* · *writes
@@ -8677,9 +8677,9 @@ where the two agree in every field. A copy of the project carries no
 authority
 · (h) **trifecta gates** — a gate the lethal-trifecta law requires
 ([§The credited gate](#the-credited-gate-normative)) MAY receive a
-record under (a) to (g). Where the workflow sends out, the expiry of
-(d) stays, and at grant time the engine MUST show, in a plain
-sentence, that later runs will send without anyone looking
+record under (a) to (g). The expiry stays wherever (d) keeps it, and
+where the workflow sends out, the engine MUST show at grant time, in
+a plain sentence, that later runs will send without anyone looking
 · (i) **attested** — two event kinds are the attestation of a gate
 passed on a record: the `approval_decided` of the ticket the run
 minted (4), its decision's source named `standing`, and beside it a
