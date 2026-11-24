@@ -1,0 +1,5 @@
+[2026-11-23T12:24:02Z] INFO  job lint · runner ci-runner-03
+[2026-11-23T12:24:03Z] INFO  commit 9e1d0a4 · branch main · checking 1204 files
+[2026-11-23T12:24:39Z] ERROR lint src/billing/invoice.rs:88:9 unused-variable `retry_count` is assigned but never read
+[2026-11-23T12:24:39Z] INFO    help: remove it, or prefix it with an underscore: `_retry_count`
+[2026-11-23T12:24:40Z] INFO  1 error · exit 1
