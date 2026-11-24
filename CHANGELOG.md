@@ -54,6 +54,47 @@ engine at its next `SPEC_PIN` bump.
   test `tasks.<id>.status`, or its recovery value says it was not sent and
   is tested.
 
+### Changed · engine 0.125.0 is the current release, and 0.124.5 is recorded (2026-11-24)
+
+- The README, CONTRIBUTING, SECURITY, the QUICKSTART status line and 00
+  §Pre-1.0 stability contract name engine 0.125.0, which embeds this spec
+  at `2edc285`, and say where the project stands: 0.125 is the current
+  release line, and 0.124.x is the previous one. Work stays focused on
+  maintenance, security and the media capabilities workflows need; native
+  video is planned for a later release. 00 gains a dated amendment and
+  keeps the 2026-10-27 one as history, and the README's family table says
+  the frozen editor extension is not qualified with 0.125.
+- The release changes no language rule and keeps machine protocol 2. What
+  it adds to `nika serve` is engine API: the owner and labels a job
+  carries, the listing of jobs, fair admission between owners, a cap on
+  the model calls in flight per provider, the retention of settled jobs
+  and the retry of a job whose run was lost. Its security fixes bind a
+  journaled gate decision to the content it approved, refuse to start an
+  MCP server on a host with no OS sandbox (`NIKA-1710`), credit a `choice`
+  or `input` gate under `NIKA-SEC-009` only when the guarded task tests
+  its answer, and keep the agent kit's shell hook, when the `nika` binary
+  is missing, from refusing commands outside a Nika project.
+- Engine 0.124.5 (2026-11-20), the first engine release published from
+  `nika-open/nika`, embeds `25078e7`, the commit that recorded 0.124.4.
+  It changes no language rule: it moves the engine's addresses to
+  `nika-open` and moves `quinn` past three QUIC advisories. The README,
+  CONTRIBUTING, 00 and 07 name it with the other 0.124 releases.
+- The README's pin example reads engine v0.125.0, and its three commands
+  print `2edc285`. 07 §Editor tooling and `llms.txt` give the `2edc285`
+  schema address for engine 0.125.0. The schema at `2edc285` is the one at
+  `25078e7`, `66dbdd6` and `5a579bc`, byte for byte, and the address
+  serves the same bytes.
+- `timeline/timeline.yaml` gains the dated entries `release-0-124-5`,
+  `release-0-125-0` (published `2026-11-24T16:24:20Z` as release
+  `457015659`, from engine commit `1261da75a`) and
+  `current-release-line-0-125`, proved live by `timeline/verify.py`.
+- `CONFORMANT_IMPLEMENTATIONS.md` gains a 0.125.0 row, measured at
+  `2edc285` with the released macOS arm64 binary, and a 0.124.5 row,
+  measured at `25078e7`. Two runs from fresh checkouts gave identical
+  verdicts, and every fixture keeps the verdict of 0.124.4: static sweep
+  453/460, runtime 126 agree and 9 diverge, lints 7/7, `run.sh` 91 PASS,
+  10 DRIFT, 0 DIVERGENT and 5 BUG.
+
 ### Changed · `NIKA-SEC-009` credits a choice or input gate only where its answer is tested (2026-11-24)
 
 - 05 said any blocking `nika:prompt` (no `default:`) that dominates the

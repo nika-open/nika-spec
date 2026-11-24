@@ -581,6 +581,44 @@ entries:
     component: engine
     evidence: { class: github-release, repo: supernovae-st/nika, tag: v0.124.4 }
 
+  - id: release-0-124-5
+    date: "2026-11-20"
+    type: release
+    version: "0.124.5"
+    title: "0.124.5 · engine release published"
+    detail: >-
+      Published on GitHub at `2026-11-20T11:15:41Z` as release `452588879`,
+      from engine commit `8b640a9b7343e05967312a7ab47d7b8c8df73559`.
+    component: engine
+    evidence: { class: github-release, repo: nika-open/nika, tag: v0.124.5 }
+
+  - id: current-release-line-0-125
+    date: "2026-11-24"
+    type: milestone
+    title: "0.125 is the current release line"
+    detail: >-
+      Engine 0.125.0 puts `nika serve` behind an application. A job carries
+      the owner and labels its caller states and can be listed. Waiting jobs
+      are shared fairly between owners. A job that a restart interrupted runs
+      again as a new attempt only when asked. The release embeds this
+      specification at commit `2edc285`. 0.125 is the current release line.
+      Native video, planned for 0.125, is not in it. Work stays focused on
+      maintenance and security. No gate below is scheduled, and no 1.0
+      release is.
+    component: standard
+    evidence: { class: github-release, repo: nika-open/nika, tag: v0.125.0 }
+
+  - id: release-0-125-0
+    date: "2026-11-24"
+    type: release
+    version: "0.125.0"
+    title: "0.125.0 · engine release published"
+    detail: >-
+      Published on GitHub at `2026-11-24T16:24:20Z` as release `457015659`,
+      from engine commit `1261da75a528f2d25d7313154233806547b6acf3`.
+    component: engine
+    evidence: { class: github-release, repo: nika-open/nika, tag: v0.125.0 }
+
 gates:
   # The future · conditions, never dates. A gate flips when its
   # conditions hold — the timeline gains a dated entry at that moment.
