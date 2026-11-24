@@ -16,6 +16,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Changed · `NIKA-SEC-009` credits a choice or input gate only where its answer is tested (2026-11-24)
+
+- 05 said any blocking `nika:prompt` (no `default:`) that dominates the
+  egress clears the lethal trifecta, whatever its mode. A `choice` or
+  `input` question answers with text, and an egress task that only waits on
+  it with `after:` runs whatever the answer, the declining one included. The
+  new [10 §The credited gate](./spec/10-authority.md#the-credited-gate-normative)
+  states the rule: a `confirm` gate counts by its position; a `choice` or
+  `input` gate counts only in front of an egress task that tests its answer
+  in `when:` (directly or through a `nika:jq` stage), and an `input` gate
+  also in front of a `nika:` tool call that sends only the typed answer; a
+  gate of any mode with `on_error:` or `for_each:` counts in front of none.
+  The 05 row and the registry entry name it.
+- Corpus: `envelope/trifecta-choice-gate-untested` (refused) and
+  `envelope/trifecta-choice-gate-tested` (clean). No earlier corpus case or
+  example uses a `choice` or `input` gate, so no verdict moves.
+- The reference engine follows this rule on `main` since
+  [nika-open/nika#1908](https://github.com/nika-open/nika/pull/1908). The
+  engine's `SPEC_PIN` is `2edc285`, before this change; its next bump brings
+  it.
+
 ### Changed · the Nika repositories moved to the `nika-open` organization (2026-11-20)
 
 - The Nika repositories moved from the GitHub organization `supernovae-st`

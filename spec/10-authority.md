@@ -258,6 +258,44 @@ block untouched — and `mode: choice` is out of scope — its
 answer is a string and the lane claims nothing there (silence, never
 wrong).
 
+## The credited gate (normative)
+
+The lethal-trifecta law (`NIKA-SEC-009`, [05](./05-errors.md)) is cleared
+only by a human gate that dominates every route from the untrusted content
+to an egress-capable task. A gate is a blocking `invoke: { tool:
+"nika:prompt" }` with no `default:`. Whether it counts in front of a given
+egress task depends on what its answer can be:
+
+- **A `confirm` gate** (`mode:` absent or the literal `confirm`) counts by
+  its position: it answers a typed yes or no, and the affirmative-consent
+  law above makes the task behind it test the yes.
+- **A `choice` or `input` gate** answers with text, not a yes. It counts in
+  front of an egress task only where that task tests the answer: its own
+  `when:` reads an exact `with:` binding of the gate's output, or of a
+  field of it, and some listed choice substituted as the answer does not
+  prove the guard true (with no literal `choices:` list, the read counts
+  unless the guard holds whatever is bound or only compares the binding to
+  `null`); or its `when:` reads the output of a `nika:jq` task whose own
+  `with:` binds the gate's output, directly or through further such tasks,
+  under the same exclusions.
+  For an `input` gate it also counts in front of a `nika:` tool call that
+  sends only the typed answer, every value it reads being that answer, a
+  constant or a secret. A `mode:` that names no literal mode is read as a
+  `choice`.
+- **A gate of any mode with `on_error:` or `for_each:`** counts in front of
+  no egress task: its value can come from a recovery or a list of answers,
+  not from one person's answer.
+
+An egress task that only waits on an uncredited gate (`after:` alone, or a
+`when:` that never reads the answer) runs whatever the answer, the
+declining one included, so the trifecta is refused as if no gate stood
+there. The diagnostic names the gate and the task and gives both repairs:
+test the answer in `when:`, or make the gate `mode: confirm`. Credit is per
+egress task. What a `nika:jq` program computes from the answer is not
+judged; the check reads the program as text and never runs it. Conformance:
+`envelope/trifecta-choice-gate-untested` (refused) and
+`envelope/trifecta-choice-gate-tested` (clean).
+
 ## Secret flow refusals carry their codes (normative)
 
 The flow rules themselves live in

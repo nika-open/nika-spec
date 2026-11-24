@@ -6277,7 +6277,7 @@ these from this file alone.
 | `NIKA-SEC-006` | secret flow — a `secrets.<name>` value reaches an unsanctioned sink (an `exec:` argument · an `invoke:` payload · an `infer:`/`agent:` prompt · an `infer:` `vision:` entry) · the diagnostic carries the **taint path** + the exact `egress:` clause that would sanction it ([10 §secret flow](./10-authority.md#secret-flow-refusals-carry-their-codes-normative) · rules in [01 §egress](./01-envelope.md#egress--optional--sanctioned-destinations-declassification)) | `security_error` | false |
 | `NIKA-SEC-007` | secret egress — a tainted value reaches the workflow boundary (`outputs:` · where a result leaves the run) · the diagnostic carries the taint path ([10 §secret flow](./10-authority.md#secret-flow-refusals-carry-their-codes-normative)) | `security_error` | false |
 | `NIKA-SEC-008` | a `nika:fetch` whose RESOLVED URL path names a data-as-code class — matched case-insensitively on the final extension; the diagnostic names the class and both repairs ([10 §authority](./10-authority.md)) | `security_error` | false |
-| `NIKA-SEC-009` | lethal trifecta complete — the declared boundary grants private read (`fs.read` non-empty) + untrusted ingress (a `nika:fetch` builtin invoked · an `mcp:*` tool invoked · an `agent:` whose whitelist admits ingress · **v2.2: an `exec:` task, `permits.exec` itself the ingress channel**) + external egress (`net.http` non-empty · an escaping `fs.write` glob · `exec` enabled), the untrusted content **reaches** an egress-capable task's effect surface (a realized flow), and no blocking `invoke: { tool: "nika:prompt" }` (no `default:`) dominates it · one finding per ungated tainted egress task, witness-named `source → sink` (NEP-0002 v2.0 · the Rule of Two as a static check · SEC-008 stays allocated to the AUTH plane) | `security_error` | false |
+| `NIKA-SEC-009` | lethal trifecta complete — the declared boundary grants private read (`fs.read` non-empty) + untrusted ingress (a `nika:fetch` builtin invoked · an `mcp:*` tool invoked · an `agent:` whose whitelist admits ingress · **v2.2: an `exec:` task, `permits.exec` itself the ingress channel**) + external egress (`net.http` non-empty · an escaping `fs.write` glob · `exec` enabled), the untrusted content **reaches** an egress-capable task's effect surface (a realized flow), and no credited human gate dominates it: a blocking `invoke: { tool: "nika:prompt" }` (no `default:`), where a `choice` or `input` gate counts only in front of an egress task that tests its answer and a gate with `on_error:` or `for_each:` counts in front of none ([10 §The credited gate](./10-authority.md#the-credited-gate-normative)) · one finding per ungated tainted egress task, witness-named `source → sink` (NEP-0002 v2.0 · the Rule of Two as a static check · SEC-008 stays allocated to the AUTH plane) | `security_error` | false |
 | `NIKA-SEC-010` | the approval-capability law is violated (NEP-0013 · the 6th invariant) — a rate-limited approval burst (`approval.rate_limited` · the N+1th distinct mint of a run, never a queue) · an approval whose resolved content hash differs from the shown hash (`approval.content_mismatch`) · a ticket replayed outside its run/step/hash scope (`approval.scope_mismatch`) · or the static heterogeneous-batch refusal (one prompt whose descendant closure unleashes two or more of `exec · write · net`) | `security_error` | false |
 | `NIKA-SEC-011` | preview-commit divergence — the commit digest recomputed at the sink over the exact bytes about to fire differs from the preview digest judged at resolution (one bit of rendered argv · a permuted context field · a mutated tool argument) · the step refuses fail-closed and the receipt carries `divergence: {preview, commit}` — judged = executed at the action scale (NEP-0015 · F-P6) | `security_error` | false |
 | `NIKA-SEC-012` | unordered shared mutations — two tasks incomparable in the DAG closure whose `nika:write`/`nika:edit`/`nika:remove_file` targets or `agent:` `images.save` targets (the save path and its `-2`, `-3`, `-4` siblings · [02 §Harness images](./02-verbs.md#harness-images--images-normative)) collide (a literal path in lexical normal form · a whole bare `const`/`inputs` reference with a string const value or string input default, keyed by that string's lexical normal form · otherwise that reference's own immutable binding identity, distinct from file names) with no precedence path (`with:` · `group` fold · `after:` other than `unwind`) to serialize them, or a `for_each` fan mutating one known path · parallelism is safe exactly where the mutations are provably disjoint (NEP-0014 law 1 · F-P15) | `security_error` | false |
@@ -8657,6 +8657,44 @@ all** — it always did, which is why it survived the death of the declared
 block untouched — and `mode: choice` is out of scope — its
 answer is a string and the lane claims nothing there (silence, never
 wrong).
+
+## The credited gate (normative)
+
+The lethal-trifecta law (`NIKA-SEC-009`, [05](./05-errors.md)) is cleared
+only by a human gate that dominates every route from the untrusted content
+to an egress-capable task. A gate is a blocking `invoke: { tool:
+"nika:prompt" }` with no `default:`. Whether it counts in front of a given
+egress task depends on what its answer can be:
+
+- **A `confirm` gate** (`mode:` absent or the literal `confirm`) counts by
+  its position: it answers a typed yes or no, and the affirmative-consent
+  law above makes the task behind it test the yes.
+- **A `choice` or `input` gate** answers with text, not a yes. It counts in
+  front of an egress task only where that task tests the answer: its own
+  `when:` reads an exact `with:` binding of the gate's output, or of a
+  field of it, and some listed choice substituted as the answer does not
+  prove the guard true (with no literal `choices:` list, the read counts
+  unless the guard holds whatever is bound or only compares the binding to
+  `null`); or its `when:` reads the output of a `nika:jq` task whose own
+  `with:` binds the gate's output, directly or through further such tasks,
+  under the same exclusions.
+  For an `input` gate it also counts in front of a `nika:` tool call that
+  sends only the typed answer, every value it reads being that answer, a
+  constant or a secret. A `mode:` that names no literal mode is read as a
+  `choice`.
+- **A gate of any mode with `on_error:` or `for_each:`** counts in front of
+  no egress task: its value can come from a recovery or a list of answers,
+  not from one person's answer.
+
+An egress task that only waits on an uncredited gate (`after:` alone, or a
+`when:` that never reads the answer) runs whatever the answer, the
+declining one included, so the trifecta is refused as if no gate stood
+there. The diagnostic names the gate and the task and gives both repairs:
+test the answer in `when:`, or make the gate `mode: confirm`. Credit is per
+egress task. What a `nika:jq` program computes from the answer is not
+judged; the check reads the program as text and never runs it. Conformance:
+`envelope/trifecta-choice-gate-untested` (refused) and
+`envelope/trifecta-choice-gate-tested` (clean).
 
 ## Secret flow refusals carry their codes (normative)
 
