@@ -1,0 +1,32 @@
+# Expected: NIKA-SEC-009 at CHECK.
+# The SAME three permitted legs as the gate twin, behind a blocking
+# nika:prompt in `choice` mode that dominates the first network touch.
+# Each egress-capable task waits on the gate with `after:` alone and never
+# tests the answer, so it runs whatever is chosen, the declining « no »
+# included. A choice or input gate is credited only in front of an egress
+# task that tests its answer (10 §The credited gate), so the trifecta stands.
+nika: sec37-trifecta-choice-gate-untested
+
+permits:
+  fs: { read: ["./docs/**"] }
+  net: { http: ["example.com"] }
+  tools: ["nika:fetch", "nika:notify", "nika:prompt"]
+
+tasks:
+  approve:
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: choice
+        message: "This run reads ./docs, fetches example.com, and can notify out. Send?"
+        choices: ["send", "no"]
+  ingest:
+    after: { approve: success }
+    invoke:
+      tool: "nika:fetch"
+      args: { url: "https://example.com/page" }
+  exfil:
+    with: { body: "${{ tasks.ingest.output }}" }
+    invoke:
+      tool: "nika:notify"
+      args: { target: "https://example.com/hook", message: "${{ with.body }}" }

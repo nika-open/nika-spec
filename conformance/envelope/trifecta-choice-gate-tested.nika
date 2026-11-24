@@ -1,0 +1,33 @@
+# Expected: check-pass (static only). The untested choice twin, with each egress-capable task testing the answer in its own when:; the run would pause on the human gate.
+# A choice gate counts in front of an egress task that reads an exact
+# `with:` binding of the gate's output in its `when:`, where some listed
+# choice makes the guard false (10 §The credited gate). Here « no » closes
+# both routes: `ingest` is skipped, and `exfil` tests the answer too, so it
+# does not run on a skipped fetch either.
+nika: sec37b-trifecta-choice-gate-tested
+
+permits:
+  fs: { read: ["./docs/**"] }
+  net: { http: ["example.com"] }
+  tools: ["nika:fetch", "nika:notify", "nika:prompt"]
+
+tasks:
+  approve:
+    invoke:
+      tool: "nika:prompt"
+      args:
+        mode: choice
+        message: "This run reads ./docs, fetches example.com, and can notify out. Send?"
+        choices: ["send", "no"]
+  ingest:
+    with: { pick: "${{ tasks.approve.output }}" }
+    when: ${{ with.pick == "send" }}
+    invoke:
+      tool: "nika:fetch"
+      args: { url: "https://example.com/page" }
+  exfil:
+    with: { pick: "${{ tasks.approve.output }}", body: "${{ tasks.ingest.output }}" }
+    when: ${{ with.pick == "send" }}
+    invoke:
+      tool: "nika:notify"
+      args: { target: "https://example.com/hook", message: "${{ with.body }}" }
