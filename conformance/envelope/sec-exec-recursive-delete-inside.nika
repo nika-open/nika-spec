@@ -1,0 +1,15 @@
+# Expected: exit 0 — a recursive delete inside the working directory is admitted.
+# The argv floor's recursive-delete rule (02 §exec Security) refuses only a
+# target that is absolute or climbs above the working directory. A relative
+# target under `out/` stays inside, so the floor admits it, and `rm -rf` on a
+# missing path exits 0.
+# Twin of sec-exec-blocklist-rm-rf and sec-exec-recursive-delete-escape.
+nika: sec11c-exec-recursive-delete-inside
+
+permits:
+  exec: ["rm"]
+
+tasks:
+  cleanup:
+    exec:
+      command: ["rm", "-rf", "out/nonexistent-recursive-delete-probe"]
