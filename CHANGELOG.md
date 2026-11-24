@@ -54,7 +54,7 @@ engine at its next `SPEC_PIN` bump.
   test `tasks.<id>.status`, or its recovery value says it was not sent and
   is tested.
 
-### Changed · engine 0.125.0 is the current release, and 0.124.5 is recorded (TODO(0.125.0 tag: release date))
+### Changed · engine 0.125.0 is the current release, and 0.124.5 is recorded (2026-11-24)
 
 - The README, CONTRIBUTING, SECURITY, the QUICKSTART status line and 00
   §Pre-1.0 stability contract name engine 0.125.0, which embeds this spec
@@ -84,8 +84,10 @@ engine at its next `SPEC_PIN` bump.
   schema address for engine 0.125.0. The schema at `2edc285` is the one at
   `25078e7`, `66dbdd6` and `5a579bc`, byte for byte, and the address
   serves the same bytes.
-- `timeline/timeline.yaml` gains the dated entry `release-0-124-5`, proved
-  live by `timeline/verify.py`.
+- `timeline/timeline.yaml` gains the dated entries `release-0-124-5`,
+  `release-0-125-0` (published `2026-11-24T16:24:20Z` as release
+  `457015659`, from engine commit `1261da75a`) and
+  `current-release-line-0-125`, proved live by `timeline/verify.py`.
 
 ### Changed · `NIKA-SEC-009` credits a choice or input gate only where its answer is tested (2026-11-24)
 
