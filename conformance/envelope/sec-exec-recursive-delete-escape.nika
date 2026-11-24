@@ -1,0 +1,15 @@
+# Expected: NIKA-SEC-001 at RUN.
+# The argv floor's recursive-delete rule (02 §exec Security): a relative target
+# that climbs above the working directory with `..` leaves it, as an absolute
+# one does. The flags are split (`-r` then `-f`) and still read as recursive.
+# Twin of sec-exec-blocklist-rm-rf (absolute target) and
+# sec-exec-recursive-delete-inside (a target that stays inside, admitted).
+nika: sec11b-exec-recursive-delete-escape
+
+permits:
+  exec: true
+
+tasks:
+  attack:
+    exec:
+      command: ["rm", "-r", "-f", "out/../../nonexistent-xyz-nika-test"]

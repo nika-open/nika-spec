@@ -17,6 +17,7 @@ dag	NIKA-EXEC	run-fail	conformance/dag/foreach-fail-fast-true.nika
 envelope	(positive)	positive-run	conformance/envelope/minimal-valid-workflow.nika
 envelope	(positive)	positive-run	conformance/envelope/outputs-contract.nika
 envelope	(positive)	positive-run	conformance/envelope/secrets-infer-egress-sanctioned.nika
+envelope	(positive)	positive-run	conformance/envelope/sec-exec-recursive-delete-inside.nika
 envelope	NIKA-PARSE	check-reject	conformance/envelope/parse-bad-task-id.nika
 envelope	NIKA-PARSE	check-reject	conformance/tests/core/envelope/054-nika-retired-version-tag-refused
 envelope	NIKA-PARSE	check-reject	conformance/envelope/parse-duplicate-task-id.nika
@@ -28,6 +29,8 @@ envelope	NIKA-PARSE	check-reject	conformance/envelope/parse-unknown-field.nika
 envelope	NIKA-PARSE	check-reject	conformance/envelope/parse-yaml-syntax-reject.nika
 envelope	NIKA-SEC	run-fail	conformance/envelope/sec-exec-array-form-blocklist.nika
 envelope	NIKA-SEC	run-fail	conformance/envelope/sec-exec-blocklist-rm-rf.nika
+envelope	NIKA-SEC	run-fail	conformance/envelope/sec-exec-recursive-delete-escape.nika
+envelope	NIKA-SEC	run-fail	conformance/envelope/sec-exec-shell-recursive-delete-spelling.nika
 envelope	NIKA-SEC	check-reject	conformance/envelope/sec-ssrf-localhost-blocked.nika
 envelope	NIKA-SEC	check-reject	conformance/envelope/sec-ssrf-metadata-blocked.nika
 envelope	NIKA-SEC	check-reject	conformance/envelope/sec-ssrf-private-range-blocked.nika

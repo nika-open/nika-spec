@@ -1,4 +1,13 @@
 # Expected: NIKA-SEC-001 at RUN.
+# The argv floor's recursive-delete rule (02 §exec Security). Until 2026-07-13
+# this case was the string `rm -rf /tmp/…`, caught by the shell blocklist; the
+# exec split (#78) turned it into argv, where `rm` is an ordinary program by
+# identity. The floor judges the argv by structure: `rm` with a recursive
+# flag on an absolute target leaves the working directory and is refused. The
+# argv is literal, so the check already reports the same NIKA-SEC-001.
+# Twins: sec-exec-recursive-delete-escape (a `..` target, refused),
+# sec-exec-recursive-delete-inside (a relative target, admitted) and
+# sec-exec-shell-recursive-delete-spelling (`rm -fr` on a `shell:` line).
 nika: sec11-exec-blocklist-rm-rf
 
 permits:
