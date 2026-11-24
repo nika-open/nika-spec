@@ -322,10 +322,10 @@ declaring it.
 ## Reference implementation
 
 [nika-open/nika](https://github.com/nika-open/nika) is the reference
-engine: one Rust binary, AGPL-3.0-or-later. Its latest release is 0.124.4.
-0.124 is the current release line. Work stays focused on maintenance,
+engine: one Rust binary, AGPL-3.0-or-later. Its latest release is 0.125.0.
+0.125 is the current release line. Work stays focused on maintenance,
 security and the media capabilities workflows need; native video is planned
-for 0.125. Install it with `brew install nika-open/tap/nika` (or
+for a later release. Install it with `brew install nika-open/tap/nika` (or
 `curl -LsSf https://nika.sh/install.sh | sh`), then check and run any
 workflow.
 
@@ -452,19 +452,21 @@ flowchart LR
 | provenance | [`ESTATE_PIN`](ESTATE_PIN) here, and in the engine, the docs, the site and the registry | the shared provenance verifier is mirrored byte for byte from a published spec commit; the CI `mirror` job compares against exactly that commit |
 
 An engine release names its spec commit twice, and the two must agree. For
-example, at engine v0.124.4, the current release (the last line runs in
+example, at engine v0.125.0, the current release (the last line runs in
 your clone of this repository):
 
+<!-- TODO(0.125.0 tag): run these three commands against the v0.125.0 tag and keep the output below only if it matches. If the tag pins another spec commit than 2edc285, replace 2edc285 everywhere in this change. -->
+
 ```sh
-curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.124.4/SPEC_PIN | grep -v '^#'
-curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.124.4/crates/nika-pack/pack/SPEC_SHA
-git log -1 --format='%h %ad %s' --date=short 66dbdd647b08d7c8594d966fa27e680ffb3fa11f
+curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.125.0/SPEC_PIN | grep -v '^#'
+curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.125.0/crates/nika-pack/pack/SPEC_SHA
+git log -1 --format='%h %ad %s' --date=short 2edc285a3f376c24990898baf5b37b161e5e638a
 ```
 
 ```
-66dbdd647b08d7c8594d966fa27e680ffb3fa11f
-66dbdd647b08d7c8594d966fa27e680ffb3fa11f
-66dbdd6 2026-11-11 docs(release): record engine 0.124.3 and name it the current release (#411)
+2edc285a3f376c24990898baf5b37b161e5e638a
+2edc285a3f376c24990898baf5b37b161e5e638a
+2edc285 2026-11-20 chore: regenerate estate.yaml after the readme badge change (#415)
 ```
 
 </details>
@@ -546,19 +548,24 @@ Not sure an idea deserves a proposal? Pressure-test it first in the engine's
 
 ## Status
 
-- **The current release.** Engine 0.124.4 (2026-11-12) embeds this spec
-  at commit
+- **The current release.** Engine 0.125.0 (TODO(0.125.0 tag: release
+  date)) embeds this spec at commit
+  [`2edc285`](https://github.com/nika-open/nika-spec/commit/2edc285a3f376c24990898baf5b37b161e5e638a),
+  the commit its `SPEC_PIN` names. 0.125 is the current release line. Work
+  stays focused on maintenance, security and the media capabilities
+  workflows need; native video is planned for a later release. The 0.124.x
+  line is the previous one: 0.124.5 (2026-11-20) embeds
+  [`25078e7`](https://github.com/nika-open/nika-spec/commit/25078e7cbab3fd3388ba60708b52dbb9244138b9),
+  0.124.4 (2026-11-12) embeds
   [`66dbdd6`](https://github.com/nika-open/nika-spec/commit/66dbdd647b08d7c8594d966fa27e680ffb3fa11f),
-  the commit its `SPEC_PIN` names. 0.124.3 (2026-11-10) embeds
+  0.124.3 (2026-11-10) embeds
   [`5a579bc`](https://github.com/nika-open/nika-spec/commit/5a579bc707c720689ba7940f6d66e11c14050d6f),
   0.124.2 (2026-11-10) embeds
   [`b4c692f`](https://github.com/nika-open/nika-spec/commit/b4c692f538834db5733f972cd8f52b558c18926a),
   and 0.124.0 (2026-10-27) and 0.124.1 (2026-10-28) embed
   [`5cd95cd`](https://github.com/nika-open/nika-spec/commit/5cd95cd25c0ff453be266794a03666e5e3f2d7a8).
-  0.124 is the current release line. Work stays focused on maintenance, security and
-  the media capabilities workflows need; native video is planned for 0.125.
   The 0.123.x line, opened by the open-source reference release 0.123.0
-  (2026-10-23, spec `6390b08`), is the previous one. No 1.0 release is
+  (2026-10-23, spec `6390b08`), came before it. No 1.0 release is
   scheduled.
 - **Spec version.** [`VERSION`](VERSION) reads `0.2.0-draft`, and the
   spec badge above reads it live. [CHANGELOG.md](CHANGELOG.md) marks what
@@ -610,7 +617,7 @@ Not sure an idea deserves a proposal? Pressure-test it first in the engine's
 | 🦋 | [nika](https://github.com/nika-open/nika) | The engine and CLI: write, check, run and verify AI workflows |
 | 📖 | [nika-docs](https://github.com/nika-open/nika-docs) | The documentation, live at [docs.nika.sh](https://docs.nika.sh) |
 | 📜 | **[nika-spec](https://github.com/nika-open/nika-spec)** | **The language specification and the suite that proves an engine follows it** |
-| 🧩 | [nika-vscode](https://github.com/nika-open/nika-vscode) | The editor extension, frozen at 0.120 and not qualified with 0.124: use `nika lsp` and the JSON Schema |
+| 🧩 | [nika-vscode](https://github.com/nika-open/nika-vscode) | The editor extension, frozen at 0.120 and not qualified with 0.125: use `nika lsp` and the JSON Schema |
 | 🟦 | [nika-client](https://github.com/nika-open/nika-client) | Run and verify workflows from TypeScript |
 | ✅ | [nika-action](https://github.com/nika-open/nika-action) | A GitHub Action that posts a `nika check` verdict on your pull requests |
 | 🚀 | [nika-actions-starter](https://github.com/nika-open/nika-actions-starter) | A ready template: workflows, editor setup and CI from the first push |

@@ -58,6 +58,16 @@ These 5 pillars are **locked forever** at v1. Everything else (providers · buil
 
 ## Pre-1.0 stability contract
 
+> **Amended TODO(0.125.0 tag: release date) · the current release line.**
+> Engine 0.125.0 embeds this spec at commit `2edc285`. 0.125 is the current
+> release line, and 0.124.x is the previous one; engine 0.124.5
+> (2026-11-20) embeds this spec at `25078e7`.
+> Work stays focused on maintenance, security and the media capabilities
+> workflows need; native video is planned for a later release. No engine
+> 1.0.0 is scheduled, so the freeze this section waits for is still not
+> planned, and each change to the grammar lands with its conformance
+> fixtures and its [CHANGELOG.md](../CHANGELOG.md) entry, as below.
+
 > **Amended 2026-10-27 · the current release line.**
 > Engine 0.124.0 embeds this spec at commit `5cd95cd`, and so does 0.124.1
 > (2026-10-28). Engine 0.124.2 (2026-11-10) embeds it at `b4c692f`. Engine

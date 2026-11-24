@@ -581,6 +581,17 @@ entries:
     component: engine
     evidence: { class: github-release, repo: supernovae-st/nika, tag: v0.124.4 }
 
+  - id: release-0-124-5
+    date: "2026-11-20"
+    type: release
+    version: "0.124.5"
+    title: "0.124.5 · engine release published"
+    detail: >-
+      Published on GitHub at `2026-11-20T11:15:41Z` as release `452588879`,
+      from engine commit `8b640a9b7343e05967312a7ab47d7b8c8df73559`.
+    component: engine
+    evidence: { class: github-release, repo: nika-open/nika, tag: v0.124.5 }
+
 gates:
   # The future · conditions, never dates. A gate flips when its
   # conditions hold — the timeline gains a dated entry at that moment.
