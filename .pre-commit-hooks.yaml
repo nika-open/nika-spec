@@ -4,7 +4,7 @@
 #
 #   repos:
 #     - repo: https://github.com/nika-open/nika
-#       rev: v0.125.0
+#       rev: v0.125.1
 #       hooks:
 #         - id: nika-check
 #

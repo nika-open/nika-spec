@@ -619,6 +619,17 @@ entries:
     component: engine
     evidence: { class: github-release, repo: nika-open/nika, tag: v0.125.0 }
 
+  - id: release-0-125-1
+    date: "2026-11-25"
+    type: release
+    version: "0.125.1"
+    title: "0.125.1 · engine release published"
+    detail: >-
+      Published on GitHub at `2026-11-25T01:10:08Z` as release `457519878`,
+      from engine commit `db136e2455272fda5acef16e4bcb2615e16d44a9`.
+    component: engine
+    evidence: { class: github-release, repo: nika-open/nika, tag: v0.125.1 }
+
 gates:
   # The future · conditions, never dates. A gate flips when its
   # conditions hold — the timeline gains a dated entry at that moment.
