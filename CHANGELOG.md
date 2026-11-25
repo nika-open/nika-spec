@@ -16,6 +16,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Changed · engine 0.125.1 is the current release (2026-11-25)
+
+- The README, CONTRIBUTING, SECURITY, the QUICKSTART status line, the
+  pre-commit hook example and 00 §Pre-1.0 stability contract name engine
+  0.125.1, which embeds this spec at `2edc285`, as 0.125.0 does. 00's
+  2026-11-24 amendment takes the new date. The README's pin example reads
+  engine v0.125.1, and its first two commands still print `2edc285`.
+- The release changes no language rule and keeps machine protocol 2. It
+  implements the argv floor's recursive delete that 02 §exec Security
+  states after `2edc285` (the entry below): a recursive delete that leaves
+  the working directory is refused, in a `command:` argv and on a
+  `shell:` line.
+- `timeline/timeline.yaml` gains `release-0-125-1` (published
+  `2026-11-25T01:10:08Z` as release `457519878`, from engine commit
+  `db136e245`), proved live by `timeline/verify.py`. The timeline README
+  names `current-release-line-0-125` as the entry that opened the current
+  line, where it still named the 0.124 one.
+- `CONFORMANT_IMPLEMENTATIONS.md` gains a 0.125.1 row, measured at
+  `2edc285` with the released macOS arm64 binary. Two runs from fresh
+  checkouts gave identical verdicts. The static sweep, the runtime and
+  lints differentials keep every verdict of 0.125.0. `run.sh` gives
+  92 PASS, 10 DRIFT, 0 DIVERGENT and 4 BUG:
+  `envelope/sec-exec-blocklist-rm-rf`, a BUG in every earlier
+  measurement, now passes. On the corpus at `9f39c5b`, the four
+  recursive-delete cases pass.
+
 ### Changed · the argv floor refuses a recursive delete that leaves the working directory (2026-11-24)
 
 - 02 §exec Security now states the argv floor of `command:`: it is judged by

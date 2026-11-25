@@ -22,8 +22,8 @@ a future date would turn a condition into a schedule.
 
 Since 2026-10-23 (the entry `reference-release-maintenance`), no gate is
 scheduled; each gate that planned a 1.0 carries a note saying so. Engine
-0.124.0 opened the current release line on 2026-10-27 (the entry
-`current-release-line-0-124`) and schedules none either.
+0.125.0 opened the current release line on 2026-11-24 (the entry
+`current-release-line-0-125`) and schedules none either.
 
 ```sh
 python3 -m unittest discover -s timeline -p 'test_*.py'
