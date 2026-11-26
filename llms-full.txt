@@ -7668,8 +7668,34 @@ tasks: ...
 > budget) with two absolute exemptions — a `paused` trace (a pending human
 > gate) and each workflow's newest trace (the standing resume candidate) —
 > and a one-line visible report whenever collection removes anything ·
-> [ADR-100](../adr/adr-100-trace-retention.md). The CLI surface (`nika trace
-> ls|rm`) and config wiring landed with the engine arc.
+> [ADR-100](../adr/adr-100-trace-retention.md). Collection also keeps the
+> evidence of a run:
+>
+> - **A run counts with its child traces** ([14](./14-composition.md)
+>   law 8). The caps and the newest-trace exemption judge root traces
+>   only (a `paused` trace, root or child, is never removed); a child trace
+>   stays as long as the run that cites it and is removed with that run,
+>   for that run's reason. Every attempt of a retried child call is cited:
+>   the `task_retrying` frame carries the `child` record of the attempt it
+>   replays, and an item row names its earlier attempts (`child_attempts` ·
+>   [17](./17-trace.md)). A cited name that is not one plain file name (a
+>   directory part, a drive or stream prefix, `.` or `..`) cites nothing.
+> - **Each workflow's newest failed run** (its root trace) is never rotated
+>   or removed for the size budget. Failed traces fill a workflow's kept
+>   count before successful ones, and the budget removes every successful
+>   trace it may before a failed one. The age cap still ends a failed trace.
+> - **A live journal is never removed for the size budget**: its writer
+>   holds its lease, or this host cannot tell. A journal whose writer holds
+>   its lease never ages out. A journal whose writer died counts as failed.
+> - **Nothing written after a live run began** is rotated or removed for
+>   the size budget while that run lives: it may be a child the run has not
+>   cited yet, since a fan-out cites its children when it ends. Only a run
+>   whose writer holds its lease holds this back, from a minute before its
+>   opening frame and for at most a day after it; a journal this host
+>   cannot vouch for holds nothing back. The age cap still applies.
+>
+> The CLI surface (`nika trace ls|rm`) and config wiring landed with the
+> engine arc.
 
 ### Workflow checkpointing / resumption
 
@@ -9700,7 +9726,15 @@ A composition is well-formed iff **all ten** hold:
 8. **Trace forest** — the child keeps its OWN hash-chain; the parent's
    trace records the child's `{semantic_hash, plan_id, trace_id,
    chain_head, outcome}` (the [13](./13-outcomes.md) Outcome, composed)
-   — a forest of chains, never one flattened stream.
+   — a forest of chains, never one flattened stream. The record rides
+   the task's terminal frame whatever the task settled as, an
+   `on_error:` skip or recovery included. A `for_each` iteration that
+   runs a child also names that child's `trace_id` on its item row
+   (`child` · [17](./17-trace.md)), an iteration the batch abandoned
+   included, so a fan-out of N children cites each of them. A retried
+   call runs one child per attempt, and each is cited: the record of a
+   failed attempt rides the `task_retrying` frame that replays it, and
+   an item row names its earlier attempts (`child_attempts`).
 9. **Composed receipts** — nested receipts compose by Merkle: the
    parent's receipt commits to the child's receipt digest, so a proof
    of the whole contains a proof of each part.
@@ -10435,9 +10469,22 @@ A `for_each` task's terminal frame (`task_completed` · `task_failed`)
 additionally carries **`items`** inline (additive · reference engine 0.118): ONE
 JSON array text · one row per item in input order · `index` · `item` (the
 item's identity, bounded) · `status` ∈ `ok` · `recovered` · `failed` ·
-`cancelled` · `never_started` · `code` and `message` when an error was recorded. Failures
+`cancelled` · `never_started` · `code` and `message` when an error was recorded ·
+`child` when the iteration ran a child workflow that kept a trace (the child
+journal's file name, its `trace_id` · [14](./14-composition.md) law 8 ·
+additive), whatever the row's status: a `recovered` row whose child failed
+carries it beside the child's `code`, and a `cancelled` row carries the trace
+its child had opened when the batch stopped · `child_attempts` when the
+iteration's child call was retried (the traces of its earlier attempts,
+oldest first, each once; `child` names the last · additive). Each
+`task_retrying` frame of a task whose failed attempt ran a child workflow
+carries that attempt's `child` row, the record a terminal frame carries
+([14](./14-composition.md) law 8). Failures
 2..N reach the journal with their own codes; the items a stopped batch
-never started are named as such.
+never started are named as such. A reader resolves `child` and each
+`child_attempts` value in the directory of the journal that carries the row;
+a value that is not one plain file name (a directory part, a drive or stream
+prefix, `.` or `..`) names no child.
 
 `cancelled` means an iteration began execution but was abandoned without a
 recorded terminal outcome. `never_started` is reserved for iterations whose
