@@ -300,6 +300,7 @@ dag	(item-cancellation)	trace-projection	conformance/tests/runtime/trace/013-his
 dag	(item-cancellation)	trace-projection	conformance/tests/runtime/trace/014-cancelled-count-absent
 dag	(item-cancellation)	trace-projection	conformance/tests/runtime/trace/015-cancelled-count-mismatch
 dag	(item-cancellation)	trace-projection	conformance/tests/runtime/trace/016-unknown-item-status
+composition	(child-trace-citation)	trace-projection	conformance/tests/runtime/trace/025-child-trace-citations
 stdlib	(positive)	positive-check	conformance/tests/stdlib/builtins/048-valid-remove-file-write-only/input.yaml
 stdlib	NIKA-SEC-004	check-reject	conformance/tests/stdlib/builtins/049-remove-file-tool-grant-required/input.yaml
 stdlib	NIKA-SEC-004	check-reject	conformance/tests/stdlib/builtins/050-remove-file-write-grant-required/input.yaml

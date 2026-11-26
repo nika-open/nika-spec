@@ -1,0 +1,52 @@
+{
+  "verdict": "clean",
+  "items": {
+    "kept": [
+      {
+        "child": "2026-11-26T10-38-27Z-bada.ndjson",
+        "index": 0,
+        "item": "done",
+        "status": "ok"
+      },
+      {
+        "child": "2026-11-26T10-38-27Z-9cb4.ndjson",
+        "code": "NIKA-TIMEOUT-001",
+        "index": 1,
+        "item": "stuck",
+        "message": "for_each item [1] stuck: child workflow `./step.nika` failed: task `stuck`: task exceeded its timeout of 1000 ms · child trace 2026-11-26T10-38-27Z-9cb4.ndjson · chain head 94aacf7ec864a6b78c491fa935c740320cdb4e095401f02318bf0bef3ea3a676",
+        "status": "recovered"
+      },
+      {
+        "child": "2026-11-26T10-38-28Z-6f88.ndjson",
+        "child_attempts": [
+          "2026-11-26T10-38-28Z-e757.ndjson"
+        ],
+        "index": 2,
+        "item": "flaky",
+        "status": "ok"
+      }
+    ],
+    "stopped": [
+      {
+        "child": "2026-11-26T10-38-27Z-fc76.ndjson",
+        "code": "NIKA-EXEC-001",
+        "index": 0,
+        "item": "breaks",
+        "message": "for_each item [0] breaks: child workflow `./step.nika` failed: task `breaks`: command exited with status 1:  · child trace 2026-11-26T10-38-27Z-fc76.ndjson · chain head 91c23fd7ff03a2cc39af0af3032adf1bd58a54e10f02400ba79c09909cbaf075",
+        "status": "failed"
+      },
+      {
+        "child": "2026-11-26T10-38-27Z-7a14.ndjson",
+        "index": 1,
+        "item": "slow",
+        "status": "cancelled"
+      },
+      {
+        "index": 2,
+        "item": "unstarted",
+        "status": "never_started"
+      }
+    ]
+  },
+  "note": "Real reference-engine run, recorded with nika 0.125.1 built from engine commit 526c9cc96, a development commit that is in no release yet (the published 0.125.1 is db136e245). No model: the parent and its child step.nika use exec: and nika:jq only. kept (max_parallel 1, retry on NIKA-EXEC-001, on_error recover): done ok; stuck's child timed out (NIKA-TIMEOUT-001) and the item recovered beside its child; flaky's child failed once and passed on the retry, so its row names the last child and child_attempts the first. stopped (max_parallel 2, fail_fast): breaks failed, slow was abandoned while its child ran and names the trace that child opened, unstarted never started. The journal also carries the task_retrying child rows of kept and solo and the terminal child rows of solo and skipped (on_error skip), which this door does not assert. The fixture holds the parent journal only: the nine child traces it cites are not beside it."
+}

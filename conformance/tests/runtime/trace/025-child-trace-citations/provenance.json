@@ -1,0 +1,64 @@
+{
+  "source_case": "child-citations-r6",
+  "source_trace": "child-citations-r6/.nika/traces/2026-11-26T10-38-27Z-3d8d.ndjson",
+  "source_trace_sha256": "e08cca6b6ac05bacf272065687166e49c4a4feb65b9b2380989bfbc9f7b1a30a",
+  "golden_sha256": "deb4ae49996959c9847710c482c730bf676211cda3cbd881bc14cf21372e53db",
+  "child_workflow": {
+    "path": "step.nika",
+    "sha256": "515facbd1396f8c6af76c7cd1f73002d396433b8547c19809c81f6154d262963",
+    "cited_as": "def_hash of every child row"
+  },
+  "engine": {
+    "version": "nika 0.125.1 (526c9cc96)",
+    "binary_sha256": "465e4305aef70a9d2863b46d99bd39a4bb386748299486864568d62d4b31f641",
+    "worktree_head": "526c9cc960ce489def6c13abf28b59e243302138",
+    "worktree_tree": "11aee8619e9003e631b0c61fff0364cd16207c04",
+    "released": false,
+    "release_note": "a development commit after the published 0.125.1 (db136e245), in no release yet"
+  },
+  "run": {
+    "argv": [
+      "nika",
+      "run",
+      "golden.nika",
+      "--max-cost-usd",
+      "0.01",
+      "--color",
+      "never"
+    ],
+    "exit": 1,
+    "cost": "unmetered: no model call, nothing priced",
+    "children_not_included": "the nine child journals record this host's absolute paths in their fs permit_checked frames; the fixture keeps the parent journal only"
+  },
+  "mutations": [],
+  "rechained_lines": 0,
+  "trace_sha256": "e08cca6b6ac05bacf272065687166e49c4a4feb65b9b2380989bfbc9f7b1a30a",
+  "derived_by": {
+    "verify": {
+      "argv": [
+        "nika",
+        "trace",
+        "verify",
+        "trace.ndjson",
+        "--color",
+        "never"
+      ],
+      "exit": 0,
+      "stdout_sha256": "3db203ed42cb9a6908eb7b7565583645908c91bd8f2eb60941a29668ba234278"
+    },
+    "outputs": {
+      "argv": [
+        "nika",
+        "trace",
+        "outputs",
+        "trace.ndjson",
+        "--json",
+        "--color",
+        "never"
+      ],
+      "exit": 0,
+      "stdout_sha256": "31c7c2088b440904baa19cb09b6612dc4c3690c42d44384f8162558297863ab6"
+    }
+  },
+  "verdict_mapping": "root scripts/runtime-differential.py trace_verdict (mirror copy)"
+}

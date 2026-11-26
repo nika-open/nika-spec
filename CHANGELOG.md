@@ -16,6 +16,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Added · an item row names its child trace (2026-11-26)
+
+- A `for_each` item row ([17](./spec/17-trace.md)) gains `child`: the file
+  name, the `trace_id`, of the trace the iteration's child workflow kept.
+  Inline rows and paged `task_items` rows carry it alike. [14](./spec/14-composition.md)
+  law 8 names it as the per-iteration record of the trace forest, so a
+  fan-out of N children cites each of them, a skipped, recovered or
+  abandoned iteration included, and a task skipped or recovered under
+  `on_error:` keeps its `child` row. A retried child call cites every
+  attempt: the row gains `child_attempts` (the earlier attempts' traces,
+  oldest first) and each `task_retrying` frame carries the failed attempt's
+  `child` row. A reader that does not know the fields keeps them as
+  uninterpreted data.
+- The corpus case is `conformance/tests/runtime/trace/025-child-trace-citations`,
+  a real journal with no model in it. Its two fan-outs end `ok`, `recovered`
+  (a child that timed out), `ok` after a retry (`child_attempts`), `failed`,
+  `cancelled` (the trace its abandoned child opened) and `never_started`.
+  A development build of the reference engine recorded it, from a commit in
+  no release yet that its `provenance.json` names. The fixture keeps the
+  parent journal alone, and the coverage matrix and the trace tier README name
+  it.
+
+### Changed · 08 states what trace collection keeps (2026-11-26)
+
+- 08 §Trace retention, the note on the reference engine's trace
+  collection, now states every hold on the evidence of a run. A run counts
+  with the child traces it cites ([14](./spec/14-composition.md) law 8):
+  the caps and the newest-trace exemption judge root traces, and a child
+  goes only with its run. Each workflow's newest failed run is never
+  rotated or removed for the size budget, a live journal is never removed
+  for the budget, and nothing written after a live run began is rotated or
+  budgeted while that run lives. The age cap still applies. No language
+  rule changes; [ADR-100](./adr/adr-100-trace-retention.md) keeps its
+  accepted text.
+
 ### Changed · engine 0.125.2 is the current release (2026-11-26)
 
 - The README, CONTRIBUTING, SECURITY, the QUICKSTART status line, the

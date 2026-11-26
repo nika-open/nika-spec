@@ -106,7 +106,15 @@ A composition is well-formed iff **all ten** hold:
 8. **Trace forest** — the child keeps its OWN hash-chain; the parent's
    trace records the child's `{semantic_hash, plan_id, trace_id,
    chain_head, outcome}` (the [13](./13-outcomes.md) Outcome, composed)
-   — a forest of chains, never one flattened stream.
+   — a forest of chains, never one flattened stream. The record rides
+   the task's terminal frame whatever the task settled as, an
+   `on_error:` skip or recovery included. A `for_each` iteration that
+   runs a child also names that child's `trace_id` on its item row
+   (`child` · [17](./17-trace.md)), an iteration the batch abandoned
+   included, so a fan-out of N children cites each of them. A retried
+   call runs one child per attempt, and each is cited: the record of a
+   failed attempt rides the `task_retrying` frame that replays it, and
+   an item row names its earlier attempts (`child_attempts`).
 9. **Composed receipts** — nested receipts compose by Merkle: the
    parent's receipt commits to the child's receipt digest, so a proof
    of the whole contains a proof of each part.

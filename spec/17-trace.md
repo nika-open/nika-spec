@@ -132,9 +132,22 @@ A `for_each` task's terminal frame (`task_completed` · `task_failed`)
 additionally carries **`items`** inline (additive · reference engine 0.118): ONE
 JSON array text · one row per item in input order · `index` · `item` (the
 item's identity, bounded) · `status` ∈ `ok` · `recovered` · `failed` ·
-`cancelled` · `never_started` · `code` and `message` when an error was recorded. Failures
+`cancelled` · `never_started` · `code` and `message` when an error was recorded ·
+`child` when the iteration ran a child workflow that kept a trace (the child
+journal's file name, its `trace_id` · [14](./14-composition.md) law 8 ·
+additive), whatever the row's status: a `recovered` row whose child failed
+carries it beside the child's `code`, and a `cancelled` row carries the trace
+its child had opened when the batch stopped · `child_attempts` when the
+iteration's child call was retried (the traces of its earlier attempts,
+oldest first, each once; `child` names the last · additive). Each
+`task_retrying` frame of a task whose failed attempt ran a child workflow
+carries that attempt's `child` row, the record a terminal frame carries
+([14](./14-composition.md) law 8). Failures
 2..N reach the journal with their own codes; the items a stopped batch
-never started are named as such.
+never started are named as such. A reader resolves `child` and each
+`child_attempts` value in the directory of the journal that carries the row;
+a value that is not one plain file name (a directory part, a drive or stream
+prefix, `.` or `..`) names no child.
 
 `cancelled` means an iteration began execution but was abandoned without a
 recorded terminal outcome. `never_started` is reserved for iterations whose

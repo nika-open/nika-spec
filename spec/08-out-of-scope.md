@@ -303,8 +303,34 @@ tasks: ...
 > budget) with two absolute exemptions — a `paused` trace (a pending human
 > gate) and each workflow's newest trace (the standing resume candidate) —
 > and a one-line visible report whenever collection removes anything ·
-> [ADR-100](../adr/adr-100-trace-retention.md). The CLI surface (`nika trace
-> ls|rm`) and config wiring landed with the engine arc.
+> [ADR-100](../adr/adr-100-trace-retention.md). Collection also keeps the
+> evidence of a run:
+>
+> - **A run counts with its child traces** ([14](./14-composition.md)
+>   law 8). The caps and the newest-trace exemption judge root traces
+>   only (a `paused` trace, root or child, is never removed); a child trace
+>   stays as long as the run that cites it and is removed with that run,
+>   for that run's reason. Every attempt of a retried child call is cited:
+>   the `task_retrying` frame carries the `child` record of the attempt it
+>   replays, and an item row names its earlier attempts (`child_attempts` ·
+>   [17](./17-trace.md)). A cited name that is not one plain file name (a
+>   directory part, a drive or stream prefix, `.` or `..`) cites nothing.
+> - **Each workflow's newest failed run** (its root trace) is never rotated
+>   or removed for the size budget. Failed traces fill a workflow's kept
+>   count before successful ones, and the budget removes every successful
+>   trace it may before a failed one. The age cap still ends a failed trace.
+> - **A live journal is never removed for the size budget**: its writer
+>   holds its lease, or this host cannot tell. A journal whose writer holds
+>   its lease never ages out. A journal whose writer died counts as failed.
+> - **Nothing written after a live run began** is rotated or removed for
+>   the size budget while that run lives: it may be a child the run has not
+>   cited yet, since a fan-out cites its children when it ends. Only a run
+>   whose writer holds its lease holds this back, from a minute before its
+>   opening frame and for at most a day after it; a journal this host
+>   cannot vouch for holds nothing back. The age cap still applies.
+>
+> The CLI surface (`nika trace ls|rm`) and config wiring landed with the
+> engine arc.
 
 ### Workflow checkpointing / resumption
 

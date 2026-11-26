@@ -1,0 +1,36 @@
+# A parent whose every child trace is cited (spec 14 law 8, spec 17 item rows). No model.
+nika: child-citations
+permits:
+  exec: true
+  fs:
+    write: ["./flaky.seen", "./flaky-solo.seen"]
+  tools: ["nika:jq"]
+tasks:
+  # The parent's own permit decision: its other effects are child calls, whose
+  # decisions each child journal witnesses.
+  witness:
+    invoke:
+      tool: nika:jq
+      args: { input: "1", expression: "." }
+  kept:
+    for_each: { items: ["done", "stuck", "flaky"], max_parallel: 1 }
+    invoke:
+      workflow: "./step.nika"
+      args: { mode: "${{ item }}" }
+    retry: { max_attempts: 2, backoff_ms: 1, backoff_strategy: fixed, jitter: false, on_codes: [NIKA-EXEC-001] }
+    on_error: { recover: "recovered" }
+  stopped:
+    for_each: { items: ["breaks", "slow", "unstarted"], max_parallel: 2 }
+    invoke:
+      workflow: "./step.nika"
+      args: { mode: "${{ item }}" }
+  solo:
+    invoke:
+      workflow: "./step.nika"
+      args: { mode: "flaky-solo" }
+    retry: { max_attempts: 2, backoff_ms: 1, backoff_strategy: fixed, jitter: false, on_codes: [NIKA-EXEC-001] }
+  skipped:
+    invoke:
+      workflow: "./step.nika"
+      args: { mode: "breaks" }
+    on_error: { skip: true }
