@@ -322,7 +322,7 @@ declaring it.
 ## Reference implementation
 
 [nika-open/nika](https://github.com/nika-open/nika) is the reference
-engine: one Rust binary, AGPL-3.0-or-later. Its latest release is 0.125.1.
+engine: one Rust binary, AGPL-3.0-or-later. Its latest release is 0.125.2.
 0.125 is the current release line. Work stays focused on maintenance,
 security and the media capabilities workflows need; native video is planned
 for a later release. Install it with `brew install nika-open/tap/nika` (or
@@ -452,19 +452,19 @@ flowchart LR
 | provenance | [`ESTATE_PIN`](ESTATE_PIN) here, and in the engine, the docs, the site and the registry | the shared provenance verifier is mirrored byte for byte from a published spec commit; the CI `mirror` job compares against exactly that commit |
 
 An engine release names its spec commit twice, and the two must agree. For
-example, at engine v0.125.1, the current release (the last line runs in
+example, at engine v0.125.2, the current release (the last line runs in
 your clone of this repository):
 
 ```sh
-curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.125.1/SPEC_PIN | grep -v '^#'
-curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.125.1/crates/nika-pack/pack/SPEC_SHA
-git log -1 --format='%h %ad %s' --date=short 2edc285a3f376c24990898baf5b37b161e5e638a
+curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.125.2/SPEC_PIN | grep -v '^#'
+curl -sS https://raw.githubusercontent.com/nika-open/nika/v0.125.2/crates/nika-pack/pack/SPEC_SHA
+git log -1 --format='%h %ad %s' --date=short 810bb194a6bdbf3d7e4a5d3c4339a53edf47cac5
 ```
 
 ```
-2edc285a3f376c24990898baf5b37b161e5e638a
-2edc285a3f376c24990898baf5b37b161e5e638a
-2edc285 2026-11-20 chore: regenerate estate.yaml after the readme badge change (#415)
+810bb194a6bdbf3d7e4a5d3c4339a53edf47cac5
+810bb194a6bdbf3d7e4a5d3c4339a53edf47cac5
+810bb19 2026-11-25 docs(release): record the published engine 0.125.1 (#425)
 ```
 
 </details>
@@ -546,10 +546,11 @@ Not sure an idea deserves a proposal? Pressure-test it first in the engine's
 
 ## Status
 
-- **The current release.** Engine 0.125.1 (2026-11-25) embeds this spec
+- **The current release.** Engine 0.125.2 (2026-11-26) embeds this spec
   at commit
-  [`2edc285`](https://github.com/nika-open/nika-spec/commit/2edc285a3f376c24990898baf5b37b161e5e638a),
-  the commit its `SPEC_PIN` names, as 0.125.0 (2026-11-24) does. 0.125 is
+  [`810bb19`](https://github.com/nika-open/nika-spec/commit/810bb194a6bdbf3d7e4a5d3c4339a53edf47cac5),
+  the commit its `SPEC_PIN` names; 0.125.1 (2026-11-25) and 0.125.0
+  (2026-11-24) embed `2edc285`. 0.125 is
   the current release line. Work
   stays focused on maintenance, security and the media capabilities
   workflows need; native video is planned for a later release. The 0.124.x
