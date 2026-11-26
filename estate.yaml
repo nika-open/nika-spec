@@ -18,11 +18,11 @@ classes:
   testimonial: "captured evidence — fixtures, corpora, traces, receipts: proves behavior; neither shipped source nor regenerable output"
   foreign: "pointer to a third-party sovereign source"
 summary:
-  classified_files: 2480
+  classified_files: 2486
   file_rows: 22
   pattern_rows: 29
   by_class:
-    authored: 2145
+    authored: 2151
     authored-pin: 1
     generated: 137
     pinned-copy: 4
@@ -54,7 +54,7 @@ files:
   evidence: "its own header: 'Bump deliberately: edit this' · the already-published nika-spec rev the shared estate tool is mirrored from (path tools/estate/scripts/estate.py), and the INPUT the mirror gate compares against; names f14f6872 (PR #315) and records historical nika-estate 247deb86 as the upgrade from 74287c75"
 - path: "SSOT.md"
   class: authored
-  sha256: 2e3987cc08fafc786cb205084b1456ad6f25892f12846c87696c2ad3f238e034
+  sha256: ca56002660d2379d04eeeb05f050b4711da1fff53bd1c4730e146763af9a7acc
   evidence: "the map of where every fact lives — prose and judgments are authored, but it carries ONE generated island (the estate:map markers · §9): scripts/ssot-map-projector.py --write derives the gated-surfaces table from THIS manifest, and --check (exit 5 · conformance.yml 'Projection gates') refuses a hand edit inside the markers — the canon.yaml hybrid, inverted"
 - path: "VERSION"
   class: authored
@@ -109,7 +109,7 @@ files:
     - "canon/ssot.lock"
 - path: "conformance/coverage-matrix.tsv"
   class: authored
-  sha256: 40c49c28ef80e480b7d15ffa1ea7ad4a4e1df36199277712845847e115cdb4d8
+  sha256: a30c2bb18016383c7183b5ba5a86fb6ce3a0bf39fc001de4540ef32543e2cf20
   evidence: "conformance/README.md §Scope + coverage: 'Curated 2026-07-08 from the reference engine's private e2e lab (475 workflows → 95 by per-cell best-file selection)' — hand-curated, no script in the tree writes it; empty cells are the declared v0.2 backlog"
 - path: "conformance/type-corpus/corpus.jsonl"
   class: generated
@@ -271,8 +271,8 @@ patterns:
     - "the VOCAB_FIXTURE constant in scripts/gen-gate-matrix.py"
 - glob: "conformance/tests/**"
   class: authored
-  match_count: 1418
-  aggregate_sha256: 33f89cd286a1d0ece53408f362c79207deb09156e6ee5fa1eaf67b08378e46ba
+  match_count: 1424
+  aggregate_sha256: 5816ae307701da7140469a7ba39b5df6b0023a10fce34a929eb6bade79d3d31a
   evidence: "the executable law — the 5-tier fixture corpus (core · deep 001-022 · lints · runtime · stdlib): input + expected pairs written at spec-authoring time, consumed by conformance/runner.py; no generation markers"
 - glob: "conformance/.nika/**"
   class: testimonial
@@ -389,7 +389,7 @@ patterns:
 - glob: "*"
   class: authored
   match_count: 18
-  aggregate_sha256: af0d1666b6e280964a818ebd73db6d19abfae07f5354dc1e4fb208248e0b3c7d
+  aggregate_sha256: 625dbfac179e6ddb45e5627bc0b4e551ec7a8860a98b098a83959524e9a68a3d
   evidence: "root prose + config (README · QUICKSTART · GLOSSARY · CONTRIBUTING · CHANGELOG hand-kept per Keep a Changelog · SECURITY · CITATION.cff · CONFORMANT_IMPLEMENTATIONS · PROOFS.md the receipts ledger · LICENSE · REUSE.toml · ruff.toml · .gitignore · .pre-commit-hooks.yaml · .bestpractices.json) — no generation markers; VERSION · llms*.txt · canon.yaml · CODE_OF_CONDUCT.md excepted in files:"
   note: "README · QUICKSTART · GLOSSARY · CONTRIBUTING · CHANGELOG carry the canon-projected count markers — tool-maintained blocks inside authored prose"
 - glob: "**"

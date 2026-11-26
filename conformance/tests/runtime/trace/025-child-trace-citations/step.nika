@@ -1,0 +1,30 @@
+# The child: one input picks what this run does. No model.
+nika: step
+inputs:
+  mode: { type: string }
+permits:
+  exec: true
+  fs:
+    write: ["./flaky.seen", "./flaky-solo.seen"]
+tasks:
+  done:
+    when: ${{ inputs.mode == 'done' }}
+    exec: { command: ["true"] }
+  flaky:
+    when: ${{ inputs.mode == 'flaky' }}
+    exec:
+      shell: "test -f flaky.seen && exit 0; touch flaky.seen; exit 1"
+  flaky_solo:
+    when: ${{ inputs.mode == 'flaky-solo' }}
+    exec:
+      shell: "test -f flaky-solo.seen && exit 0; touch flaky-solo.seen; exit 1"
+  stuck:
+    when: ${{ inputs.mode == 'stuck' }}
+    timeout: "1s"
+    exec: { command: ["sleep", "10"] }
+  breaks:
+    when: ${{ inputs.mode == 'breaks' }}
+    exec: { command: ["false"] }
+  slow:
+    when: ${{ inputs.mode == 'slow' }}
+    exec: { command: ["sleep", "5"] }

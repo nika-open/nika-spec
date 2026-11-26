@@ -153,6 +153,14 @@ Each case records its source hash, engine pin and exact mutations in
 `provenance.json`. Re-chaining these unkeyed negative fixtures tests the
 reader's semantic completeness rules, never authenticity against rewriting.
 
+Fixture `025` is a real composition run (14 law 8): every item row names the
+child trace its iteration ran (`child`, whatever the row's status, a
+`cancelled` row included), a retried iteration adds `child_attempts`, and the
+journal keeps the `task_retrying` and terminal `child` rows of plain calls;
+the door asserts the two `items` tables only. It holds the parent journal alone:
+the reference engine's verify then adds one line per cited child that is not
+beside it, and the verdict and the exit do not change.
+
 Verdict law · four classes, and the first three all mean « the chain
 walks » ·
 

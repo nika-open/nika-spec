@@ -29,6 +29,14 @@ engine at its next `SPEC_PIN` bump.
   oldest first) and each `task_retrying` frame carries the failed attempt's
   `child` row. A reader that does not know the fields keeps them as
   uninterpreted data.
+- The corpus case is `conformance/tests/runtime/trace/025-child-trace-citations`,
+  a real journal with no model in it. Its two fan-outs end `ok`, `recovered`
+  (a child that timed out), `ok` after a retry (`child_attempts`), `failed`,
+  `cancelled` (the trace its abandoned child opened) and `never_started`.
+  A development build of the reference engine recorded it, from a commit in
+  no release yet that its `provenance.json` names. The fixture keeps the
+  parent journal alone, and the coverage matrix and the trace tier README name
+  it.
 
 ### Changed · 08 states what trace collection keeps (2026-11-26)
 
