@@ -58,9 +58,9 @@ These 5 pillars are **locked forever** at v1. Everything else (providers · buil
 
 ## Pre-1.0 stability contract
 
-> **Amended 2026-11-25 · the current release line.**
-> Engine 0.125.1 embeds this spec at commit `2edc285`, as engine 0.125.0
-> (2026-11-24) does. 0.125 is the current
+> **Amended 2026-11-26 · the current release line.**
+> Engine 0.125.2 embeds this spec at commit `810bb19`; engines 0.125.1
+> (2026-11-25) and 0.125.0 (2026-11-24) embed `2edc285`. 0.125 is the current
 > release line, and 0.124.x is the previous one; engine 0.124.5
 > (2026-11-20) embeds this spec at `25078e7`.
 > Work stays focused on maintenance, security and the media capabilities

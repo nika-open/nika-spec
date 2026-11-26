@@ -51,6 +51,28 @@ engine at its next `SPEC_PIN` bump.
   rule changes; [ADR-100](./adr/adr-100-trace-retention.md) keeps its
   accepted text.
 
+### Changed · engine 0.125.2 is the current release (2026-11-26)
+
+- The README, CONTRIBUTING, SECURITY, the QUICKSTART status line, the
+  pre-commit hook example and 00 §Pre-1.0 stability contract name engine
+  0.125.2, which embeds this spec at `810bb19`; 0.125.1 and 0.125.0 embed
+  `2edc285`. 00's amendment takes the new date. The README's pin example
+  reads engine v0.125.2, and its first two commands print `810bb19`.
+- The release changes no language rule and keeps machine protocol 2. Its
+  `SPEC_PIN` moves from `2edc285` to `810bb19`, so it embeds the argv
+  floor's recursive delete of 02 §exec Security, the `NIKA-SEC-009` gate
+  credit and the first pack of recipe jobs (the entries below).
+- `timeline/timeline.yaml` gains `release-0-125-2` (published
+  `2026-11-26T15:26:14Z` as release `459573503`, from engine commit
+  `ae2d5f0b7`), proved live by `timeline/verify.py`.
+- `CONFORMANT_IMPLEMENTATIONS.md` gains a 0.125.2 row, measured at
+  `810bb19` with the released macOS arm64 binary. Two runs from fresh
+  checkouts gave identical verdicts. The static sweep, the runtime and
+  lints differentials keep every verdict of 0.125.1. `run.sh` judges 111
+  files, five more than at `2edc285`, and gives 97 PASS, 10 DRIFT,
+  0 DIVERGENT and 4 BUG: the three recursive-delete cases and the two
+  choice-gate cases pass, and the four BUGs are those of 0.125.1.
+
 ### Changed · engine 0.125.1 is the current release (2026-11-25)
 
 - The README, CONTRIBUTING, SECURITY, the QUICKSTART status line, the
