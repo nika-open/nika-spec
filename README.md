@@ -167,8 +167,8 @@ flowchart LR
   end
   classDef infer fill:#5b8cff22,stroke:#5b8cff,stroke-width:2px
   classDef invoke fill:#22d3ee22,stroke:#22d3ee,stroke-width:2px
-  style file fill:#8b8cf80d,stroke:#8b8cf8
-  style fence fill:#8b8cf814,stroke:#8b8cf8,stroke-dasharray:6 4
+  style file fill:#2650ff0d,stroke:#2650ff
+  style fence fill:#2650ff14,stroke:#2650ff,stroke-dasharray:6 4
 ```
 
 | Key | Required | What it declares |
@@ -432,7 +432,7 @@ flowchart LR
   spec -- "SPEC_PIN" --> vscode
   spec -- "SPEC_PIN" --> registry
   spec -- "generated · drift-checked" --> docs
-  style spec fill:#8b8cf822,stroke:#8b8cf8,stroke-width:2px
+  style spec fill:#2650ff22,stroke:#2650ff,stroke-width:2px
 ```
 
 - **Every count has one home.** Verbs, builtins, providers, error codes and
