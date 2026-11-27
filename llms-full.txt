@@ -7,8 +7,12 @@
 <p align="center">
   <a href="https://nika.sh">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://nika.sh/brand/nika-logo-dark.svg">
-      <img src="https://nika.sh/brand/nika-logo-light.svg" alt="Nika" width="220">
+      <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/banner-nika-spec-dark.png?v=651abdc94de8">
+      <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/banner-nika-spec-light.png?v=8aecb38a3c0a">
+      <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/banner-nika-spec-dark.webp?v=b459cb0ac65c">
+      <source type="image/webp" srcset="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/banner-nika-spec-light.webp?v=b7f4bb99d9ff">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/banner-nika-spec-dark.gif?v=59fe8606383a">
+      <img src="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/banner-nika-spec-light.gif?v=b982fdde4549" alt="Nika. The specification. Know what a .nika file can say. The open specification of the Nika workflow language: its rules, its JSON Schema, its examples and its conformance suite." width="100%">
     </picture>
   </a>
 </p>
@@ -24,7 +28,7 @@
   <a href="VERSION"><img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnika-open%2Fnika-spec%2Fmain%2FVERSION&search=%5B0-9%5D%2B%5C.%5B0-9%5D%2B%5C.%5B0-9%5D%2B%5BA-Za-z0-9.-%5D*&label=spec" alt="Spec version, read live from the VERSION file"></a>
   <a href="https://github.com/nika-open/nika-spec/actions/workflows/conformance.yml"><img src="https://github.com/nika-open/nika-spec/actions/workflows/conformance.yml/badge.svg?branch=main" alt="Conformance gate"></a>
   <a href="https://github.com/nika-open/nika/releases/latest"><img src="https://img.shields.io/github/v/release/nika-open/nika?label=engine" alt="Engine release"></a>
-  <a href="https://docs.nika.sh"><img src="https://img.shields.io/badge/docs-docs.nika.sh-8b8cf8.svg" alt="Documentation"></a>
+  <a href="https://docs.nika.sh"><img src="https://img.shields.io/badge/docs-docs.nika.sh-2650ff.svg" alt="Documentation"></a>
 </p>
 
 <p align="center">
@@ -169,8 +173,8 @@ flowchart LR
   end
   classDef infer fill:#5b8cff22,stroke:#5b8cff,stroke-width:2px
   classDef invoke fill:#22d3ee22,stroke:#22d3ee,stroke-width:2px
-  style file fill:#8b8cf80d,stroke:#8b8cf8
-  style fence fill:#8b8cf814,stroke:#8b8cf8,stroke-dasharray:6 4
+  style file fill:#2650ff0d,stroke:#2650ff
+  style fence fill:#2650ff14,stroke:#2650ff,stroke-dasharray:6 4
 ```
 
 | Key | Required | What it declares |
@@ -434,7 +438,7 @@ flowchart LR
   spec -- "SPEC_PIN" --> vscode
   spec -- "SPEC_PIN" --> registry
   spec -- "generated · drift-checked" --> docs
-  style spec fill:#8b8cf822,stroke:#8b8cf8,stroke-width:2px
+  style spec fill:#2650ff22,stroke:#2650ff,stroke-width:2px
 ```
 
 - **Every count has one home.** Verbs, builtins, providers, error codes and
@@ -617,6 +621,13 @@ Not sure an idea deserves a proposal? Pressure-test it first in the engine's
 
 <!-- city:map -->
 ## 🦋 The Nika family
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/family-dark.png?v=4cfc8ec611de">
+    <img src="https://raw.githubusercontent.com/nika-open/.github/main/profile/assets/family-light.png?v=dfedffa46450" alt="The repositories of Nika. The language and its engine: nika-spec and nika. From the tools you already use: nika-plugins, nika-vscode, nika-client and gh-nika. On every pull request, and beyond: nika-action, nika-actions-starter, nika-registry, homebrew-tap, nika-estate and nika-docs." width="100%">
+  </picture>
+</p>
 
 | | Repository | What it gives you |
 |---|---|---|
