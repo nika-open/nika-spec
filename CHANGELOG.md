@@ -16,6 +16,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes merged after the spec commit engine 0.123.0 embeds. They reach the
 engine at its next `SPEC_PIN` bump.
 
+### Changed · a secret never declassifies into a route field (2026-11-27)
+
+- 01 §egress now names the **route fields**: a task's `model:`, an `exec:`
+  `cwd:`, an `agent:` `images.save:`, the `args.model` of
+  `nika:image_generate` and `nika:tts_generate`, and the closed list of
+  builtin file-path arguments (`path`, `pattern`, `out`, `input`,
+  `inputs[k]`, `data.path`, `image`, `images[k]`, `mask`, `output_dir`,
+  `filename_prefix`, `multipart[k].path`, a string `bundle`). A secret that
+  reaches one is `NIKA-SEC-006` whatever its `egress:`, a rule for the
+  task's own sink or tool included. Every other argument of the same call
+  stays a send the `egress:` rules decide. The `NIKA-SEC-006` rows of 05 and
+  10 and the registry entry cite the route fields.
+- Why: the text said an `egress:` rule sanctions a send to a tool, so a
+  reader concluded that `{ to: "nika:write" }` cleared a secret in the
+  `path` of `nika:write`. A model id, a directory or a path is written into
+  the trace, the task's record and the name of a saved file: it is never a
+  secret, and the reference engine refuses it.
+- Engine: 0.125.2 refuses the first four families. The builtin file-path
+  arguments are refused from the engine release after 0.125.2.
+- Corpus: five negatives, `envelope/secrets-route-{task-model, exec-cwd,
+  agent-images-save, media-args-model, builtin-path}`. Each declares the
+  `egress:` rule for its own sink and expects `NIKA-SEC-006` at check.
+
 ### Added · an item row names its child trace (2026-11-26)
 
 - A `for_each` item row ([17](./spec/17-trace.md)) gains `child`: the file
