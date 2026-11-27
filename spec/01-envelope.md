@@ -424,6 +424,31 @@ egress clears the **send**, not the **capture**: a sanctioned `exec:`/tool can
 still embed the secret in its captured output, so that output stays tainted and
 re-leaks if it reaches an unsanctioned sink downstream.
 
+**Route fields (normative) · no `egress:` rule declassifies them.** A few
+fields name *where* an effect goes or *which* model it calls instead of
+carrying data to it. The engine writes their value into the trace and the
+task's record, judges a path against the boundary, and a media builtin folds
+its model and its file name into the file it saves. A model id, a directory
+or a file path is never a secret. So a `secrets.<name>` value that reaches a
+route field, directly or through any chain of bindings, is `NIKA-SEC-006`
+**whatever the secret's `egress:`**, a rule naming the task's own sink or tool
+included. (A route field is unrelated to the `run.access` route of
+[§run](#run--optional--the-runs-entropy-clock-access-and-reasoning-declaration).) The set is closed:
+
+| Route field | Of |
+|---|---|
+| `model:` | an `infer:` or `agent:` task |
+| `cwd:` | an `exec:` task |
+| `images.save:` | an `agent:` task |
+| `args.model` | `nika:image_generate` · `nika:tts_generate` |
+| a file-path argument | `path` of `nika:read` · `nika:grep` · `nika:write` · `nika:edit` · `nika:remove_file` · `pattern` of `nika:glob` · `bundle` of `nika:decide` when it is a string · `input` and `out` of `nika:image_fx` · each `inputs[k]` and `out` of `nika:image_compose` · `data.path` and `out` of `nika:chart` · `image`, each `images[k]` and `mask` of `nika:image_generate` · `output_dir` and `filename_prefix` of `nika:image_generate` and `nika:tts_generate` · each `multipart[k].path` of `nika:fetch` |
+
+Every other argument of the same call stays a send that the rules above
+decide: a `nika:write` `content`, a `nika:fetch` header, an `exec:` argument.
+The refusal names the field and carries the taint path. The remedy is to write
+the path or the model in the file, or to supply it through `inputs:` or
+`const:`, never through a secret.
+
 **The workflow boundary is a sink too — `to: "outputs"`.** Because the
 capture stays tainted, the return value of an authenticated call
 (`tasks.<id>.output` of a fetch that sent an API key) taints every

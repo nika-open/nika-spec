@@ -18,11 +18,11 @@ classes:
   testimonial: "captured evidence — fixtures, corpora, traces, receipts: proves behavior; neither shipped source nor regenerable output"
   foreign: "pointer to a third-party sovereign source"
 summary:
-  classified_files: 2486
+  classified_files: 2491
   file_rows: 22
   pattern_rows: 29
   by_class:
-    authored: 2151
+    authored: 2156
     authored-pin: 1
     generated: 137
     pinned-copy: 4
@@ -54,7 +54,7 @@ files:
   evidence: "its own header: 'Bump deliberately: edit this' · the already-published nika-spec rev the shared estate tool is mirrored from (path tools/estate/scripts/estate.py), and the INPUT the mirror gate compares against; names f14f6872 (PR #315) and records historical nika-estate 247deb86 as the upgrade from 74287c75"
 - path: "SSOT.md"
   class: authored
-  sha256: ca56002660d2379d04eeeb05f050b4711da1fff53bd1c4730e146763af9a7acc
+  sha256: 30c68f10e35a7565302e89cf76f5467a3fa11c544e7beb209537f93c24e4bdf1
   evidence: "the map of where every fact lives — prose and judgments are authored, but it carries ONE generated island (the estate:map markers · §9): scripts/ssot-map-projector.py --write derives the gated-surfaces table from THIS manifest, and --check (exit 5 · conformance.yml 'Projection gates') refuses a hand edit inside the markers — the canon.yaml hybrid, inverted"
 - path: "VERSION"
   class: authored
@@ -62,7 +62,7 @@ files:
   evidence: "hand-set pack version (currently 0.2.0-draft) — no lane advances it; the derivations' INPUT (showcase-projector.py reads it as pack_version)"
 - path: "canon.yaml"
   class: generated
-  sha256: 11006335ba53b54f1a085f542787cf713c58ee42fc547b21688a9e13275c8ac9
+  sha256: 8d4cc89d7043ea7a3794358de10db3a9d37593479f4f9734913ccc7ab89d88c2
   evidence: "its own header: 'GENERATED · canon.yaml is a generated projection since the C0 flip — manual edits of a generated surface make CI red (ssot-compiler --check-canon · rc=5)' + a detached body-sha256 self-hash per PAA-006"
   derivation:
     tool: "python3 scripts/ssot-compiler.py --emit-canon (ssot-compiler 0.2.0-sandbox · SSOT-1 §21-23, the canon flip)"
@@ -78,7 +78,7 @@ files:
   note: "hybrid by design: the 15 ledger sections (canon/EXCEPTIONS.md · SSOT-1 §18) stay AUTHORED and are carried verbatim through the regeneration — editing those sections is legal, editing an imported section is rc=5"
 - path: "canon/laws-index.json"
   class: generated
-  sha256: 79a7eb256294359430987049c808cbfe2fde40db92a435ccd308923ca92a1e40
+  sha256: fdfe508ccf1a35a292e6681c1669c364547f0946c5f9205658fcc36e0adc9e8f
   evidence: "carries the generator identity block ('ssot-compiler' + source_sha256) · scripts/ssot-compiler.py header: 'emits ONE deterministic projection (canon/laws-index.json, stable sort by law id, canonical JSON, NFC, LF)'"
   derivation:
     tool: "python3 scripts/ssot-compiler.py (write mode)"
@@ -89,7 +89,7 @@ files:
     - "schemas/registries.schema.json"
 - path: "canon/ssot.lock"
   class: generated
-  sha256: aaf4c4b5f0199ee8e884e828073e0434515dc17e7c7fc51ab5af13e6a49af90d
+  sha256: 8f2ccc6f8a7c604ab4c7903bb970e3c858d4af224cb2eb74838779d51df9b9e2
   evidence: "single-line canonical JSON carrying generator identity ('ssot-compiler' 0.2.0-sandbox + its own source_sha256), the 27 leaf digests and law_count — no human writes a lock"
   derivation:
     tool: "python3 scripts/ssot-compiler.py (write mode · leaf digests only, digest-dag layer 1, own digest DETACHED per PAA-006)"
@@ -100,7 +100,7 @@ files:
     - "canon/laws-index.json (leaf-hashed)"
 - path: "canon/ssot.lock.sha256"
   class: generated
-  sha256: dc0f6cf71bc35a6aff23ccb147868147c0f5bcd07c89a4ec426b25eeeccbf37e
+  sha256: d68cba5568f289c71849943177cc2c398428fdd8f71fd96400d71fdd1bf63ff2
   evidence: "the lock's own digest, DETACHED into a sidecar per PAA-006 (a file cannot contain its own hash) — written by the compiler alongside the lock"
   derivation:
     tool: "python3 scripts/ssot-compiler.py (write mode · the detached-sidecar emission)"
@@ -109,7 +109,7 @@ files:
     - "canon/ssot.lock"
 - path: "conformance/coverage-matrix.tsv"
   class: authored
-  sha256: a30c2bb18016383c7183b5ba5a86fb6ce3a0bf39fc001de4540ef32543e2cf20
+  sha256: efc3c19fa30e875dba0522632776bd4fe657b07f6afb49aa98fd69ae48b852a1
   evidence: "conformance/README.md §Scope + coverage: 'Curated 2026-07-08 from the reference engine's private e2e lab (475 workflows → 95 by per-cell best-file selection)' — hand-curated, no script in the tree writes it; empty cells are the declared v0.2 backlog"
 - path: "conformance/type-corpus/corpus.jsonl"
   class: generated
@@ -134,7 +134,7 @@ files:
   note: "the engine vendors this manifest into its pack (crates/nika-pack) — downstream it is pinned-copy, here it is the generated original"
 - path: "llms-full.txt"
   class: generated
-  sha256: 609c676e63f7d26433f81e7b99562dc355a39ed8bbe1039d4b5f6f84915926a1
+  sha256: 22f19a4db02e4e512a0c3cfa05bebbb29bac8637d4025c49e30941c265630b14
   evidence: "in-file marker: '<!-- llms-full.txt · GENERATED by scripts/llms-projector.py · do not hand-edit -->'"
   derivation:
     tool: "python3 scripts/llms-projector.py --write"
@@ -230,12 +230,12 @@ patterns:
 - glob: "canon/laws/**"
   class: authored
   match_count: 13
-  aggregate_sha256: 50fa4071ff9df2e36be8ccfbf437f12e4bc6eafccedff890ac0007bbb7766469
+  aggregate_sha256: fdc7725ad7cf75d477ebe3adcd9b34780d253533fe88515bfce881a5a967424c
   evidence: "the law registries humans edit — every entry schema-validated against schemas/law.schema.json, leaf-hashed into canon/ssot.lock by the ssot-compiler (law_count lives in the lock, never typed here); the compiler CONSUMES these, nothing writes them"
 - glob: "canon/**"
   class: authored
   match_count: 14
-  aggregate_sha256: 0d3bf1ca44fe41231aa5c632da71c7bcc610f8ea56d85da62e887e8d24425ad1
+  aggregate_sha256: 8d3da3a4458c48b94f435d528545bcaeb8b68223539753c260cad3881ed9a95a
   evidence: "the registries humans edit (surface · builtins · features · conformance · grammar · types · providers · migrations · projections · tombstones · snippets · templates · diagnostics) + canon/EXCEPTIONS.md (the §18 exception ledger) — the SOURCES the compiler seals; ssot.lock + sidecar excepted in files:"
 - glob: "conformance/tests/runtime/gates/**"
   class: generated
@@ -286,8 +286,8 @@ patterns:
   evidence: "run.sh: 'Corpus files write ONLY under ./out/<family>/' — the nika:write outputs captured from the reference run of the corpus; evidence of behavior, not law and not regenerable here"
 - glob: "conformance/**"
   class: authored
-  match_count: 223
-  aggregate_sha256: e9aa44ba380abd2171ca085e2fc99ac6c156bba36fe144cea4e895a1382bce2f
+  match_count: 228
+  aggregate_sha256: 5e0b0922a57e336082116029c23bde550e3e60de27a21f87e50e6d45c1187239
   evidence: "the 95-workflow corpus (envelope · variables · verbs · errors · dag · gates · types · yaml-profile · values · composition · decision-goldens frozen at authoring time and consumed by decision_core_selftest.py) + the Python cores/selftests/runner + README/FINDINGS/runner-protocol; type-corpus + coverage-matrix excepted in files:"
 - glob: "proofs/**"
   class: testimonial
@@ -322,7 +322,7 @@ patterns:
 - glob: "spec/**"
   class: authored
   match_count: 18
-  aggregate_sha256: 69b99b28211d0133d6501ea3745cb5e4b077bf101c5e3f9d9dbcb2e22f7e7228
+  aggregate_sha256: 8ec21483ae39801d09e8953101bb76b6a869850303a033ae731e4f70507df66c
   evidence: "the normative prose law (00-overview → 17-trace) — THE spec; no generation markers"
   note: "spec/00-04 · 06-08 carry tool-maintained '<!-- canon:KEY -->N<!-- /canon -->' count markers inside the authored prose (canon-projectors.py TARGET 0 · --check gated) — the class stays authored"
 - glob: "stdlib/**"
@@ -389,7 +389,7 @@ patterns:
 - glob: "*"
   class: authored
   match_count: 18
-  aggregate_sha256: 3848a57d9c8e311d61fc03acac3e2457d3af97c8c75ab69f245725486adac611
+  aggregate_sha256: 20d382ba8bce9e68d28cf3990cdc46e19edcad6a933f15682681d009b3b557c9
   evidence: "root prose + config (README · QUICKSTART · GLOSSARY · CONTRIBUTING · CHANGELOG hand-kept per Keep a Changelog · SECURITY · CITATION.cff · CONFORMANT_IMPLEMENTATIONS · PROOFS.md the receipts ledger · LICENSE · REUSE.toml · ruff.toml · .gitignore · .pre-commit-hooks.yaml · .bestpractices.json) — no generation markers; VERSION · llms*.txt · canon.yaml · CODE_OF_CONDUCT.md excepted in files:"
   note: "README · QUICKSTART · GLOSSARY · CONTRIBUTING · CHANGELOG carry the canon-projected count markers — tool-maintained blocks inside authored prose"
 - glob: "**"

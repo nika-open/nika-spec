@@ -7,7 +7,7 @@
 #   sealed outcome_class enum) · the 15 ledger sections (canon/EXCEPTIONS.md ·
 #   SSOT-1 §18) stay AUTHORED and are carried verbatim — editing those is legal.
 # regenerate: python3 scripts/ssot-compiler.py --emit-canon
-# body-sha256: afe7786b60016690868b85a144b0e96ea7c6179977894397533a4f27b1fad558
+# body-sha256: 77f6668d9b550c1ce06cdbb3bd1f69a40928905bc511fd60fe77e013f29b863f
 #   (digest of every byte below the end-of-header line · detached self-hash per PAA-006)
 # ---- end generated header (SSOT-1 §21-23 · the canon flip · C0)
 # nika canonical registry · the single source of truth for Nika canonical facts
@@ -417,7 +417,7 @@ error_codes:
     - { code: NIKA-SEC-003, category: security_error, transient: "false", failure: "run-recursion bound — nested-run depth exceeded OR self-launching workflow" }
     - { code: NIKA-SEC-004, category: security_error, transient: "false", failure: "effect outside the declared permits: capability boundary (fs/net/exec/tool)" }
     - { code: NIKA-SEC-005, category: security_error, transient: "false", failure: "SSRF block — a nika:fetch/nika:notify URL resolves to a loopback/private/link-local/metadata target (always-on engine floor · independent of permits:)" }
-    - { code: NIKA-SEC-006, category: security_error, transient: "false", failure: "secret flow — a secrets.<name> value reaches an unsanctioned sink (exec argument · invoke payload · infer/agent prompt · infer vision entry) · the diagnostic carries the taint path + the egress clause that would sanction it (spec 10 · flow rules in 01 §egress)" }
+    - { code: NIKA-SEC-006, category: security_error, transient: "false", failure: "secret flow — a secrets.<name> value reaches an unsanctioned sink (exec argument · invoke payload · infer/agent prompt · infer vision entry), or a route field whatever its egress (a task model · an exec cwd · an agent images.save · a media builtin args.model · a builtin file-path argument) · the diagnostic carries the taint path + the egress clause that would sanction a send, or the route field it reached (spec 10 · flow rules and route fields in 01 §egress)" }
     - { code: NIKA-SEC-007, category: security_error, transient: "false", failure: "secret egress — a tainted value reaches the workflow boundary (outputs:) · the diagnostic carries the taint path (spec 10 · the to: outputs sanction in 01 §egress)" }
     - { code: NIKA-SEC-008, category: security_error, transient: "false", failure: "data-as-code sink · a nika:fetch resolved URL path names a code-bearing class (serialized-executable · script/interpreter · executable binary/module · the closed NEP-0006 list) and the task declares no door — no lift: entry naming the data-as-code law · the read hides an execution sink (F-O7 · NEP-0006)" }
     - { code: NIKA-SEC-009, category: security_error, transient: "false", failure: "lethal trifecta complete — the declared boundary grants private read (fs.read non-empty) + untrusted ingress (a nika:fetch builtin invoked · an mcp:* tool invoked · an agent: whose whitelist admits ingress) + external egress (net.http non-empty · an escaping fs.write glob · exec enabled), the untrusted content REACHES an egress-capable task's effect surface (a realized flow), and no credited human gate dominates it: a blocking invoke: nika:prompt (no default:), where a choice or input gate counts only before an egress task that tests its answer and a gate with on_error: or for_each: counts before none (10 §The credited gate · NEP-0002 v2.0 · the Rule of Two as a static check)" }

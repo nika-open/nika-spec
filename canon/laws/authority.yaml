@@ -1416,6 +1416,11 @@ laws:
       - conformance/envelope/secrets-leak-exec-sink.nika
       - conformance/envelope/secrets-launder-concat.nika
       - conformance/envelope/secrets-two-sinks-one-sanctioned.nika
+      - conformance/envelope/secrets-route-task-model.nika
+      - conformance/envelope/secrets-route-exec-cwd.nika
+      - conformance/envelope/secrets-route-agent-images-save.nika
+      - conformance/envelope/secrets-route-media-args-model.nika
+      - conformance/envelope/secrets-route-builtin-path.nika
     projections: ["prose:01-envelope", "prose:10-authority", "schema", "cli:check", "sdk"]
     implementation_surfaces:
       - engine:nika-engine
@@ -1424,7 +1429,8 @@ laws:
       - conformance:authority-suite
     introduced_in: C0
     proof_obligations:
-      - "Les fixtures vivantes portent déjà la loi : un sink sanctionné par egress passe (secrets-infer-egress-sanctioned), tout sink non sanctionné refuse avec son taint path (les quatre négatives, codes NIKA-SEC-006/NIKA-SEC-007)."
+      - "Les fixtures vivantes portent déjà la loi : un sink sanctionné par egress passe (secrets-infer-egress-sanctioned), tout sink non sanctionné refuse avec son taint path (les négatives secrets-leak-*, secrets-launder-concat et secrets-two-sinks-one-sanctioned, codes NIKA-SEC-006/NIKA-SEC-007)."
+      - "Un champ de route (model: d'une tâche, cwd: d'un exec, images.save: d'un agent, args.model d'un outil média, argument de chemin d'un builtin) n'est jamais déclassifié : chaque négative secrets-route-* déclare la règle egress vers son propre puits et refuse quand même (NIKA-SEC-006, 01 §egress)."
       - "R8 loi 10 contexte du mini-gate : provenance (source:, loi 0322), autorité (permits/policy, lois 0313-0314) et destination de déclassification (egress:, cette loi) ne sont jamais confondues; la candidate allow: est morte sur la collision avec policy.allow (loi 0313)."
     closure_gates:
       - egress-sole-declassification-form
