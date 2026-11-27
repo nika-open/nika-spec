@@ -305,7 +305,7 @@ refusal classes were report-only until W4:
 
 | Code | Class | Witness (in the diagnostic) |
 |---|---|---|
-| `NIKA-SEC-006` | a `secrets.<name>` value reaches an **unsanctioned sink** (an `exec:` argument · an `invoke:` payload · an `infer:`/`agent:` prompt · an `infer:` `vision:` entry) | the **taint path**, source-first (`secrets.api_key → with.tok → tasks.call.output → exec`) + the exact `egress: [{ to: "<sink>" }]` clause that would sanction it |
+| `NIKA-SEC-006` | a `secrets.<name>` value reaches an **unsanctioned sink** (an `exec:` argument · an `invoke:` payload · an `infer:`/`agent:` prompt · an `infer:` `vision:` entry) · or a **route field**, which no `egress:` rule clears (a task's `model:` · an `exec:` `cwd:` · an `agent:` `images.save:` · a media builtin's `args.model` · a builtin's file-path argument · [01 §egress](./01-envelope.md#egress--optional--sanctioned-destinations-declassification)) | the **taint path**, source-first (`secrets.api_key → with.tok → tasks.call.output → exec`) + the exact `egress: [{ to: "<sink>" }]` clause that would sanction a send, or the route field it reached |
 | `NIKA-SEC-007` | a tainted value reaches the **workflow boundary** (`outputs:` — where a result leaves the run) | the taint path into the `outputs:` entry |
 
 Both are `security_error`, check-time, blocking. The taint path is not

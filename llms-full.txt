@@ -1643,6 +1643,31 @@ egress clears the **send**, not the **capture**: a sanctioned `exec:`/tool can
 still embed the secret in its captured output, so that output stays tainted and
 re-leaks if it reaches an unsanctioned sink downstream.
 
+**Route fields (normative) · no `egress:` rule declassifies them.** A few
+fields name *where* an effect goes or *which* model it calls instead of
+carrying data to it. The engine writes their value into the trace and the
+task's record, judges a path against the boundary, and a media builtin folds
+its model and its file name into the file it saves. A model id, a directory
+or a file path is never a secret. So a `secrets.<name>` value that reaches a
+route field, directly or through any chain of bindings, is `NIKA-SEC-006`
+**whatever the secret's `egress:`**, a rule naming the task's own sink or tool
+included. (A route field is unrelated to the `run.access` route of
+[§run](#run--optional--the-runs-entropy-clock-access-and-reasoning-declaration).) The set is closed:
+
+| Route field | Of |
+|---|---|
+| `model:` | an `infer:` or `agent:` task |
+| `cwd:` | an `exec:` task |
+| `images.save:` | an `agent:` task |
+| `args.model` | `nika:image_generate` · `nika:tts_generate` |
+| a file-path argument | `path` of `nika:read` · `nika:grep` · `nika:write` · `nika:edit` · `nika:remove_file` · `pattern` of `nika:glob` · `bundle` of `nika:decide` when it is a string · `input` and `out` of `nika:image_fx` · each `inputs[k]` and `out` of `nika:image_compose` · `data.path` and `out` of `nika:chart` · `image`, each `images[k]` and `mask` of `nika:image_generate` · `output_dir` and `filename_prefix` of `nika:image_generate` and `nika:tts_generate` · each `multipart[k].path` of `nika:fetch` |
+
+Every other argument of the same call stays a send that the rules above
+decide: a `nika:write` `content`, a `nika:fetch` header, an `exec:` argument.
+The refusal names the field and carries the taint path. The remedy is to write
+the path or the model in the file, or to supply it through `inputs:` or
+`const:`, never through a secret.
+
 **The workflow boundary is a sink too — `to: "outputs"`.** Because the
 capture stays tainted, the return value of an authenticated call
 (`tasks.<id>.output` of a fetch that sent an API key) taints every
@@ -6293,7 +6318,7 @@ these from this file alone.
 | `NIKA-SEC-003` | run-recursion bound — nested-run depth exceeded OR self-launching workflow | `security_error` | false |
 | `NIKA-SEC-004` | effect outside the declared `permits:` capability boundary (fs/net/exec/tool · [01 §permits](./01-envelope.md#permits--optional--the-declared-capability-boundary)) · ⚠️ **`env` is the fifth category since D-2026-08-11-N22 and this code does NOT yet cover it** — measured 2026-08-11 on the shipped binary: an in-process expression reads the ambient environment under an absent `permits:` block and under an explicit empty `permits.env`, and the static check reports the body as pure compute. Stated as an obligation, not a guarantee: a spec that listed `env` here before the engine enforced it would be the parallel-list defect this vocabulary exists to prevent · ✅ **the measured hole is CLOSED since 2026-08-15** — re-measured that day on the same three authority shapes (absent block · explicit empty `permits.env` · granted `permits.env`): all three now REFUSE at `nika check` with `NIKA-VAR-005`, naming the class the program reached for. The remedy is D-2026-08-11-N26's SUBTRACTION, not coverage by this code: `env` is withheld from the function set every jq seam compiles with, so the program never becomes runnable. The first half of the ⚠️ therefore STANDS — this code still does not make `env` a boundary category — while the evidence sentence behind it no longer holds | `security_error` | false |
 | `NIKA-SEC-005` | SSRF block — a `nika:fetch`/`nika:notify` URL resolves to a loopback/private/link-local/metadata target (the always-on engine floor · independent of `permits:`, with ONE carve-out: an exact loopback literal in `permits.net.http` declassifies the floor for that host only · [01 §permits](./01-envelope.md#permits--optional--the-declared-capability-boundary)) | `security_error` | false |
-| `NIKA-SEC-006` | secret flow — a `secrets.<name>` value reaches an unsanctioned sink (an `exec:` argument · an `invoke:` payload · an `infer:`/`agent:` prompt · an `infer:` `vision:` entry) · the diagnostic carries the **taint path** + the exact `egress:` clause that would sanction it ([10 §secret flow](./10-authority.md#secret-flow-refusals-carry-their-codes-normative) · rules in [01 §egress](./01-envelope.md#egress--optional--sanctioned-destinations-declassification)) | `security_error` | false |
+| `NIKA-SEC-006` | secret flow — a `secrets.<name>` value reaches an unsanctioned sink (an `exec:` argument · an `invoke:` payload · an `infer:`/`agent:` prompt · an `infer:` `vision:` entry), or reaches a **route field** whatever its `egress:` (a task's `model:` · an `exec:` `cwd:` · an `agent:` `images.save:` · a media builtin's `args.model` · a builtin's file-path argument · [01 §egress route fields](./01-envelope.md#egress--optional--sanctioned-destinations-declassification)) · the diagnostic carries the **taint path** + the exact `egress:` clause that would sanction a send, or the field a route names ([10 §secret flow](./10-authority.md#secret-flow-refusals-carry-their-codes-normative) · rules in [01 §egress](./01-envelope.md#egress--optional--sanctioned-destinations-declassification)) | `security_error` | false |
 | `NIKA-SEC-007` | secret egress — a tainted value reaches the workflow boundary (`outputs:` · where a result leaves the run) · the diagnostic carries the taint path ([10 §secret flow](./10-authority.md#secret-flow-refusals-carry-their-codes-normative)) | `security_error` | false |
 | `NIKA-SEC-008` | a `nika:fetch` whose RESOLVED URL path names a data-as-code class — matched case-insensitively on the final extension; the diagnostic names the class and both repairs ([10 §authority](./10-authority.md)) | `security_error` | false |
 | `NIKA-SEC-009` | lethal trifecta complete — the declared boundary grants private read (`fs.read` non-empty) + untrusted ingress (a `nika:fetch` builtin invoked · an `mcp:*` tool invoked · an `agent:` whose whitelist admits ingress · **v2.2: an `exec:` task, `permits.exec` itself the ingress channel**) + external egress (`net.http` non-empty · an escaping `fs.write` glob · `exec` enabled), the untrusted content **reaches** an egress-capable task's effect surface (a realized flow), and no credited human gate dominates it: a blocking `invoke: { tool: "nika:prompt" }` (no `default:`), where a `choice` or `input` gate counts only in front of an egress task that tests its answer and a gate with `on_error:` or `for_each:` counts in front of none ([10 §The credited gate](./10-authority.md#the-credited-gate-normative)) · one finding per ungated tainted egress task, witness-named `source → sink` (NEP-0002 v2.0 · the Rule of Two as a static check · SEC-008 stays allocated to the AUTH plane) | `security_error` | false |
@@ -8751,7 +8776,7 @@ refusal classes were report-only until W4:
 
 | Code | Class | Witness (in the diagnostic) |
 |---|---|---|
-| `NIKA-SEC-006` | a `secrets.<name>` value reaches an **unsanctioned sink** (an `exec:` argument · an `invoke:` payload · an `infer:`/`agent:` prompt · an `infer:` `vision:` entry) | the **taint path**, source-first (`secrets.api_key → with.tok → tasks.call.output → exec`) + the exact `egress: [{ to: "<sink>" }]` clause that would sanction it |
+| `NIKA-SEC-006` | a `secrets.<name>` value reaches an **unsanctioned sink** (an `exec:` argument · an `invoke:` payload · an `infer:`/`agent:` prompt · an `infer:` `vision:` entry) · or a **route field**, which no `egress:` rule clears (a task's `model:` · an `exec:` `cwd:` · an `agent:` `images.save:` · a media builtin's `args.model` · a builtin's file-path argument · [01 §egress](./01-envelope.md#egress--optional--sanctioned-destinations-declassification)) | the **taint path**, source-first (`secrets.api_key → with.tok → tasks.call.output → exec`) + the exact `egress: [{ to: "<sink>" }]` clause that would sanction a send, or the route field it reached |
 | `NIKA-SEC-007` | a tainted value reaches the **workflow boundary** (`outputs:` — where a result leaves the run) | the taint path into the `outputs:` entry |
 
 Both are `security_error`, check-time, blocking. The taint path is not

@@ -45,6 +45,11 @@ envelope	NIKA-SEC-gate	check-reject	conformance/envelope/secrets-launder-concat.
 envelope	NIKA-SEC-gate	check-reject	conformance/envelope/secrets-leak-exec-sink.nika
 envelope	NIKA-SEC-gate	check-reject	conformance/envelope/secrets-leak-infer-prompt.nika
 envelope	NIKA-SEC-gate	check-reject	conformance/envelope/secrets-two-sinks-one-sanctioned.nika
+envelope	NIKA-SEC-006	check-reject	conformance/envelope/secrets-route-task-model.nika
+envelope	NIKA-SEC-006	check-reject	conformance/envelope/secrets-route-exec-cwd.nika
+envelope	NIKA-SEC-006	check-reject	conformance/envelope/secrets-route-agent-images-save.nika
+envelope	NIKA-SEC-006	check-reject	conformance/envelope/secrets-route-media-args-model.nika
+envelope	NIKA-SEC-006	check-reject	conformance/envelope/secrets-route-builtin-path.nika
 errors	NIKA-BUILTIN	recovered	conformance/errors/foreach-recover-null-alignment.nika
 errors	NIKA-EXEC	recovered	conformance/errors/on-error-on-codes-matched.nika
 errors	NIKA-EXEC	recovered	conformance/errors/on-error-recover-downstream.nika
